@@ -69,8 +69,8 @@ const App = () => {
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [currentTab, setCurrentTab] = useState('home');
+  const [isAuthReady, setIsAuthReady] = useState(true);
+const [isLoading, setIsLoading] = useState(false);
   const [activeSheet, setActiveSheet] = useState(null); // 'account' or 'settings'
   const [toast, setToast] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
