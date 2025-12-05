@@ -1,10 +1,15 @@
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, {
+  useState,
+  useEffect,
+  useCallback,
+  useMemo,
+} from 'react';
 import { initializeApp } from 'firebase/app';
 import {
   getAuth,
   signInAnonymously,
   signInWithCustomToken,
-  onAuthStateChanged
+  onAuthStateChanged,
 } from 'firebase/auth';
 import {
   getFirestore,
@@ -14,7 +19,7 @@ import {
   collection,
   addDoc,
   runTransaction,
-  Timestamp
+  Timestamp,
 } from 'firebase/firestore';
 import {
   Home,
@@ -33,19 +38,22 @@ import {
   DollarSign,
   Activity,
   MapPin,
-  MessageSquare
+  MessageSquare,
+  X,
 } from 'lucide-react';
 
 // --- GLOBAL FIREBASE CONFIGURATION (Provided by Environment) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-// IMPORTANT: use __firebase_config here, not __app_id
+const appId =
+  typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
 const firebaseConfig = JSON.parse(
   typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'
 );
 const initialAuthToken =
-  typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+  typeof __initial_auth_token !== 'undefined'
+    ? __initial_auth_token
+    : null;
 
-// Helper to get Firestore paths
+// Firestore path helpers
 const getUserProfilePath = (userId) =>
   `artifacts/${appId}/users/${userId}/spawn_data/profile`;
 const getUserInventoryPath = (userId) =>
@@ -54,37 +62,35 @@ const getPublicSupCastCollectionPath = () =>
   `artifacts/${appId}/public/data/supcast_cases`;
 
 const App = () => {
-  // --- STATE MANAGEMENT ---
+  // --- STATE ---
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [currentTab, setCurrentTab] = useState('home');
-  const [activeSheet, setActiveSheet] = useState(null); // 'account' or 'settings'
+  const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings'
   const [toast, setToast] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Firestore Data State
   const [profileData, setProfileData] = useState({
     xpBalance: 0,
     spawnTokenBalance: 0.0,
     streakDays: 0,
-    lastCheckIn: null
+    lastCheckIn: null,
   });
   const [inventory, setInventory] = useState([]);
   const [supCastFeed, setSupCastFeed] = useState([]);
 
-  // SupCast Form State
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDesc, setNewCaseDesc] = useState('');
   const [isPostingCase, setIsPostingCase] = useState(false);
 
-  // --- UI/UX COLORS ---
+  // --- THEME ---
   const neon = 'text-[#00FFC0]';
   const neonBg = 'bg-[#00FFC0]';
-  const neonShadow = 'shadow-[0_0_15px_rgba(0,255,192,0.25)]';
+  const neonShadow =
+    'shadow-[0_0_15px_rgba(0,255,192,0.25)]';
   const accentBlue = 'text-[#00A6FF]';
-  const accentBlueBg = 'bg-[#00A6FF]';
   const darkBg = 'bg-[#050509]';
   const cardBg = 'bg-[#11111A]';
   const borderColor = 'border-[#252535]';
@@ -111,7 +117,7 @@ const App = () => {
       </div>
     );
 
-  // --- FIREBASE INITIALIZATION & AUTH ---
+  // --- FIREBASE INIT ---
   useEffect(() => {
     try {
       const app = initializeApp(firebaseConfig);
@@ -120,45 +126,53 @@ const App = () => {
       setDb(firestoreInstance);
       setAuth(authInstance);
 
-      const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
-        if (user) {
-          setUserId(user.uid);
-          setIsAuthReady(true);
-        } else {
-          try {
-            if (initialAuthToken) {
-              await signInWithCustomToken(authInstance, initialAuthToken);
-            } else {
-              await signInAnonymously(authInstance);
-            }
-          } catch (e) {
-            console.error('Auth failed:', e);
-            showToast('Authentication failed. Check logs.', 'error');
+      const unsub = onAuthStateChanged(
+        authInstance,
+        async (user) => {
+          if (user) {
+            setUserId(user.uid);
             setIsAuthReady(true);
+          } else {
+            try {
+              if (initialAuthToken) {
+                await signInWithCustomToken(
+                  authInstance,
+                  initialAuthToken
+                );
+              } else {
+                await signInAnonymously(authInstance);
+              }
+            } catch (e) {
+              console.error('Auth failed:', e);
+              showToast(
+                'Authentication failed. Check logs.',
+                'error'
+              );
+              setIsAuthReady(true);
+            }
           }
         }
-      });
+      );
 
-      return () => unsubscribe();
+      return () => unsub();
     } catch (e) {
       console.error('Firebase Initialization Error:', e);
       setIsAuthReady(true);
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [showToast]);
 
-  // --- FIREBASE DATA LISTENERS ---
+  // --- SNAPSHOTS ---
   useEffect(() => {
     if (!isAuthReady || !userId || !db) return;
     setIsLoading(true);
 
     // Profile
     const profileRef = doc(db, getUserProfilePath(userId));
-    const unsubscribeProfile = onSnapshot(
+    const unsubProfile = onSnapshot(
       profileRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
+      (snap) => {
+        if (snap.exists()) {
+          const data = snap.data();
           setProfileData((prev) => ({
             ...prev,
             xpBalance: data.xpBalance || 0,
@@ -167,19 +181,19 @@ const App = () => {
             lastCheckIn:
               data.lastCheckIn instanceof Timestamp
                 ? data.lastCheckIn.toDate()
-                : null
+                : null,
           }));
         } else {
           const initialData = {
             xpBalance: 100,
             spawnTokenBalance: 5.0,
             streakDays: 1,
-            lastCheckIn: Timestamp.now()
+            lastCheckIn: Timestamp.now(),
           };
           setDoc(profileRef, initialData).then(() => {
             setProfileData({
               ...initialData,
-              lastCheckIn: new Date()
+              lastCheckIn: new Date(),
             });
             showToast(
               'Welcome to SpawnEngine! Initial XP & SPN credited.',
@@ -189,38 +203,44 @@ const App = () => {
         }
         setIsLoading(false);
       },
-      (error) => {
-        console.error('Profile Snapshot Error:', error);
+      (err) => {
+        console.error('Profile Snapshot Error:', err);
         showToast('Error loading profile data.', 'error');
         setIsLoading(false);
       }
     );
 
     // Inventory
-    const inventoryColRef = collection(db, getUserInventoryPath(userId));
-    const unsubscribeInventory = onSnapshot(
-      inventoryColRef,
-      (snapshot) => {
-        const newInventory = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
+    const invCol = collection(
+      db,
+      getUserInventoryPath(userId)
+    );
+    const unsubInv = onSnapshot(
+      invCol,
+      (snap) => {
+        const inv = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }));
-        setInventory(newInventory);
+        setInventory(inv);
       },
-      (error) => {
-        console.error('Inventory Snapshot Error:', error);
+      (err) => {
+        console.error('Inventory Snapshot Error:', err);
         showToast('Error loading inventory.', 'error');
       }
     );
 
-    // SupCast (public)
-    const supCastColRef = collection(db, getPublicSupCastCollectionPath());
-    const unsubscribeSupCast = onSnapshot(
-      supCastColRef,
-      (snapshot) => {
-        const feed = snapshot.docs.map((docSnap) => ({
-          id: docSnap.id,
-          ...docSnap.data()
+    // SupCast
+    const supCol = collection(
+      db,
+      getPublicSupCastCollectionPath()
+    );
+    const unsubSup = onSnapshot(
+      supCol,
+      (snap) => {
+        const feed = snap.docs.map((d) => ({
+          id: d.id,
+          ...d.data(),
         }));
         feed.sort(
           (a, b) =>
@@ -229,180 +249,219 @@ const App = () => {
         );
         setSupCastFeed(feed.slice(0, 50));
       },
-      (error) => {
-        console.error('SupCast Snapshot Error:', error);
+      (err) => {
+        console.error('SupCast Snapshot Error:', err);
         showToast('Error loading SupCast feed.', 'error');
       }
     );
 
     return () => {
-      unsubscribeProfile();
-      unsubscribeInventory();
-      unsubscribeSupCast();
+      unsubProfile();
+      unsubInv();
+      unsubSup();
     };
   }, [isAuthReady, userId, db, showToast]);
 
   // --- HELPERS ---
   const formatTimeRemaining = (lastCheckIn) => {
     if (!lastCheckIn) return 'Ready now';
-    const nextCheckIn = lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const timeRemainingMs = nextCheckIn - new Date().getTime();
-    if (timeRemainingMs <= 0) return 'Ready now';
+    const next =
+      lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
+    const diff = next - Date.now();
+    if (diff <= 0) return 'Ready now';
 
-    const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
-    const minutes = Math.floor(
-      (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
+    const h = Math.floor(diff / (1000 * 60 * 60));
+    const m = Math.floor(
+      (diff % (1000 * 60 * 60)) / (1000 * 60)
     );
-    return `${hours}h ${minutes}m`;
+    return `${h}h ${m}m`;
   };
 
   const streakReady = useMemo(() => {
     if (!profileData.lastCheckIn) return true;
     return (
-      new Date().getTime() - profileData.lastCheckIn.getTime() >=
+      Date.now() -
+        profileData.lastCheckIn.getTime() >=
       24 * 60 * 60 * 1000
     );
   }, [profileData.lastCheckIn]);
 
   const streakHoursLeft = useMemo(() => {
     if (!profileData.lastCheckIn) return 0;
-    const nextCheckIn = profileData.lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const timeRemainingMs = nextCheckIn - new Date().getTime();
-    if (timeRemainingMs <= 0) return 0;
-    return 24 - timeRemainingMs / (1000 * 60 * 60);
+    const next =
+      profileData.lastCheckIn.getTime() +
+      24 * 60 * 60 * 1000;
+    const diff = next - Date.now();
+    if (diff <= 0) return 0;
+    return 24 - diff / (1000 * 60 * 60);
   }, [profileData.lastCheckIn]);
 
-  // --- CORE LOGIC ---
-  const handleCheckIn = useCallback(
-    async () => {
-      if (!db || !userId) return;
+  // --- CORE ACTIONS ---
+  const handleCheckIn = useCallback(async () => {
+    if (!db || !userId) return;
 
-      const profileRef = doc(db, getUserProfilePath(userId));
-      const now = new Date();
-      const lastCheckIn = profileData.lastCheckIn;
+    const profileRef = doc(db, getUserProfilePath(userId));
+    const now = new Date();
+    const last = profileData.lastCheckIn;
 
-      const ready =
-        !lastCheckIn ||
-        now.getTime() - lastCheckIn.getTime() >= 24 * 60 * 60 * 1000;
+    const ready =
+      !last ||
+      now.getTime() - last.getTime() >=
+        24 * 60 * 60 * 1000;
 
-      if (!ready) {
-        const timeRemainingMs =
-          lastCheckIn.getTime() + 24 * 60 * 60 * 1000 - now.getTime();
-        const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
-        const minutes = Math.floor(
-          (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
-        );
-        return showToast(`Next check-in in ${hours}h ${minutes}m.`, 'info');
-      }
+    if (!ready) {
+      const remaining =
+        last.getTime() +
+        24 * 60 * 60 * 1000 -
+        now.getTime();
+      const h = Math.floor(
+        remaining / (1000 * 60 * 60)
+      );
+      const m = Math.floor(
+        (remaining % (1000 * 60 * 60)) /
+          (1000 * 60)
+      );
+      return showToast(
+        `Next check-in in ${h}h ${m}m.`,
+        'info'
+      );
+    }
 
-      try {
-        await runTransaction(db, async (transaction) => {
-          const profileDoc = await transaction.get(profileRef);
-          if (!profileDoc.exists()) throw new Error('Profile does not exist');
+    try {
+      await runTransaction(db, async (tx) => {
+        const profileDoc = await tx.get(profileRef);
+        if (!profileDoc.exists())
+          throw new Error('Profile missing');
 
-          const data = profileDoc.data();
-          let newStreakDays = data.streakDays || 0;
-          let newXp = data.xpBalance || 0;
-          const checkInReward = 50 + newStreakDays * 5;
+        const data = profileDoc.data();
+        let newStreak = data.streakDays || 0;
+        let newXp = data.xpBalance || 0;
+        const reward = 50 + newStreak * 5;
 
-          const isStreakContinued =
-            !lastCheckIn ||
-            now.getTime() - lastCheckIn.getTime() <
-              48 * 60 * 60 * 1000;
+        const keepStreak =
+          !last ||
+          now.getTime() - last.getTime() <
+            48 * 60 * 60 * 1000;
 
-          if (isStreakContinued) {
-            newStreakDays += 1;
-          } else {
-            newStreakDays = 1;
-            showToast('Streak lost, reset to Day 1.', 'error');
-          }
-
-          newXp += checkInReward;
-
-          transaction.update(profileRef, {
-            streakDays: newStreakDays,
-            xpBalance: newXp,
-            lastCheckIn: Timestamp.now()
-          });
+        if (keepStreak) {
+          newStreak += 1;
+        } else {
+          newStreak = 1;
           showToast(
-            `Day ${newStreakDays} check-in successful! +${checkInReward} XP.`,
-            'success'
+            'Streak lost, reset to Day 1.',
+            'error'
           );
+        }
+
+        newXp += reward;
+
+        tx.update(profileRef, {
+          streakDays: newStreak,
+          xpBalance: newXp,
+          lastCheckIn: Timestamp.now(),
         });
-      } catch (e) {
-        console.error('Check-in Transaction failed:', e);
-        showToast('Check-in failed. Please try again.', 'error');
-      }
-    },
-    [db, userId, profileData.lastCheckIn, showToast]
-  );
+        showToast(
+          `Day ${newStreak} check-in: +${reward} XP`,
+          'success'
+        );
+      });
+    } catch (e) {
+      console.error('Check-in failed:', e);
+      showToast(
+        'Check-in failed. Please try again.',
+        'error'
+      );
+    }
+  }, [db, userId, profileData.lastCheckIn, showToast]);
 
   const handlePackOpen = useCallback(
     async (packId) => {
       if (!db || !userId)
-        return showToast('Platform is initializing.', 'error');
+        return showToast(
+          'Platform is initializing.',
+          'error'
+        );
 
       try {
-        await runTransaction(db, async (transaction) => {
-          const packRef = doc(db, getUserInventoryPath(userId), packId);
-          const profileRef = doc(db, getUserProfilePath(userId));
+        await runTransaction(db, async (tx) => {
+          const packRef = doc(
+            db,
+            getUserInventoryPath(userId),
+            packId
+          );
+          const profileRef = doc(
+            db,
+            getUserProfilePath(userId)
+          );
 
-          const packDoc = await transaction.get(packRef);
-          const profileDoc = await transaction.get(profileRef);
+          const packDoc = await tx.get(packRef);
+          const profileDoc = await tx.get(profileRef);
 
-          if (!packDoc.exists() || packDoc.data().count <= 0) {
-            throw new Error('Pack not found or count is zero.');
+          if (
+            !packDoc.exists() ||
+            packDoc.data().count <= 0
+          ) {
+            throw new Error(
+              'Pack not found or count is zero.'
+            );
           }
           if (!profileDoc.exists()) {
             throw new Error('Profile not found.');
           }
 
           const currentPacks = packDoc.data().count;
-          const currentXP = profileDoc.data().xpBalance || 0;
+          const currentXP =
+            profileDoc.data().xpBalance || 0;
 
-          const dropType = Math.random();
+          const r = Math.random();
           let rewardText = '';
           let xpReward = 0;
           let itemType = null;
           let itemAmount = 0;
 
-          if (dropType < 0.05) {
+          if (r < 0.05) {
             itemType = 'Relic';
             itemAmount = 1;
             xpReward = 500;
-            rewardText = 'MYTHIC DROP! +1 Relic & 500 XP.';
-          } else if (dropType < 0.25) {
+            rewardText =
+              'MYTHIC DROP! +1 Relic & 500 XP.';
+          } else if (r < 0.25) {
             itemType = 'Shard';
             itemAmount = 1;
             xpReward = 100;
             rewardText = '+1 Shard & 100 XP.';
           } else {
             itemType = 'Fragment';
-            itemAmount = Math.floor(Math.random() * 3) + 1;
+            itemAmount =
+              Math.floor(Math.random() * 3) + 1;
             xpReward = 25;
             rewardText = `+${itemAmount} Fragments & 25 XP.`;
           }
 
-          transaction.update(packRef, { count: currentPacks - 1 });
+          tx.update(packRef, {
+            count: currentPacks - 1,
+          });
 
-          transaction.update(profileRef, { xpBalance: currentXP + xpReward });
+          tx.update(profileRef, {
+            xpBalance: currentXP + xpReward,
+          });
 
           const itemRef = doc(
             db,
             getUserInventoryPath(userId),
             itemType.toLowerCase()
           );
-          const itemDoc = await transaction.get(itemRef);
-          const currentItemCount = itemDoc.exists()
-            ? itemDoc.data().count
+          const itemSnap = await tx.get(itemRef);
+          const currentCount = itemSnap.exists()
+            ? itemSnap.data().count
             : 0;
 
-          transaction.set(
+          tx.set(
             itemRef,
             {
               type: itemType,
-              count: currentItemCount + itemAmount,
-              lastAcquired: Timestamp.now()
+              count: currentCount + itemAmount,
+              lastAcquired: Timestamp.now(),
             },
             { merge: true }
           );
@@ -410,8 +469,11 @@ const App = () => {
           showToast(rewardText, 'success');
         });
       } catch (e) {
-        console.error('Pack Open Transaction failed:', e);
-        showToast(`Open failed: ${e.message}`, 'error');
+        console.error('Pack open failed:', e);
+        showToast(
+          `Open failed: ${e.message}`,
+          'error'
+        );
       }
     },
     [db, userId, showToast]
@@ -420,17 +482,22 @@ const App = () => {
   const handlePostCase = useCallback(
     async () => {
       if (!db || !userId)
-        return showToast('Platform is initializing.', 'error');
+        return showToast(
+          'Platform is initializing.',
+          'error'
+        );
       if (!newCaseTitle || !newCaseDesc)
-        return showToast('Title and description are required.', 'error');
+        return showToast(
+          'Title and description required.',
+          'error'
+        );
 
       setIsPostingCase(true);
       try {
-        const supCastColRef = collection(
+        const supCol = collection(
           db,
           getPublicSupCastCollectionPath()
         );
-
         const newCase = {
           title: newCaseTitle,
           description: newCaseDesc,
@@ -438,17 +505,21 @@ const App = () => {
           posterId: userId,
           expertId: null,
           timestamp: Timestamp.now(),
-          posterHandle: '@spawniz'
+          posterHandle: '@spawniz',
         };
-
-        await addDoc(supCastColRef, newCase);
-
+        await addDoc(supCol, newCase);
         setNewCaseTitle('');
         setNewCaseDesc('');
-        showToast('Question posted to SupCast network!', 'success');
+        showToast(
+          'Question posted to SupCast network!',
+          'success'
+        );
       } catch (e) {
-        console.error('Post Case failed:', e);
-        showToast('Failed to post case. Check network.', 'error');
+        console.error('Post case failed:', e);
+        showToast(
+          'Failed to post case. Check network.',
+          'error'
+        );
       } finally {
         setIsPostingCase(false);
       }
@@ -459,76 +530,84 @@ const App = () => {
   // --- TABS ---
 
   const HomeTab = () => {
-    const timeRemainingText = formatTimeRemaining(profileData.lastCheckIn);
-    const progressPercent = Math.min(100, (streakHoursLeft / 24) * 100);
+    const timeRemainingText = formatTimeRemaining(
+      profileData.lastCheckIn
+    );
+    const progressPercent = Math.min(
+      100,
+      (streakHoursLeft / 24) * 100
+    );
 
-    // Mock Mesh & Gas data (no external API yet)
     const meshOverview = [
       {
         label: 'Active wallets',
         value: '4',
-        sub: 'Mesh linked'
+        sub: 'Mesh linked',
       },
       {
         label: 'Creator tokens',
         value: '12',
-        sub: 'Tracked'
+        sub: 'Tracked',
       },
       {
         label: 'Packs opened',
         value: '31',
-        sub: 'Last 7 days'
+        sub: 'Last 7 days',
       },
       {
         label: 'SupCast cases',
         value: supCastFeed.length.toString(),
-        sub: 'Open'
-      }
+        sub: 'Open',
+      },
     ];
 
     const gasInfo = {
       base: {
         low: '0.05',
         avg: '0.09',
-        high: '0.14'
+        high: '0.14',
       },
       pnl: {
         profit30d: '+1.24 ETH',
         fees30d: '0.31 ETH',
-        hitRate: '62%'
-      }
+        hitRate: '62%',
+      },
     };
 
     const oracleFeed = [
       {
-        type: 'alpha',
         message:
-          "Alpha signal: wallet '0xab...c78' increased pack volume by 220%.",
-        icon: <ShieldCheck className="w-3.5 h-3.5 text-[#00FFC0]" />
+          "Alpha: wallet '0xab...c78' ramped pack volume by 220%.",
+        icon: (
+          <ShieldCheck className="w-3.5 h-3.5 text-[#00FFC0]" />
+        ),
       },
       {
-        type: 'gravity',
         message:
-          'Gravity cluster: Creator mesh Y is pulling new liquidity on Base.',
-        icon: <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
+          'Gravity: Creator mesh Y is pulling fresh liquidity on Base.',
+        icon: (
+          <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
+        ),
       },
       {
-        type: 'burn',
         message:
-          "Burn window: high-volume wallet '0xde...f12' reduced supply by 18%.",
-        icon: <Flame className="w-3.5 h-3.5 text-red-500" />
+          "Burn: wallet '0xde...f12' reduced supply by 18% in 24h.",
+        icon: (
+          <Flame className="w-3.5 h-3.5 text-red-500" />
+        ),
       },
       {
-        type: 'quest',
         message:
-          'Quest: Complete 1 SupCast solution and 1 pack open in 24h for a bonus.',
-        icon: <MapPin className="w-3.5 h-3.5 text-blue-400" />
-      }
+          'Quest: 1 SupCast solve + 1 pack open today = bonus XP.',
+        icon: (
+          <MapPin className="w-3.5 h-3.5 text-blue-400" />
+        ),
+      },
     ];
 
     return (
       <div className="space-y-4">
-        {/* Mesh Overview row */}
+        {/* Mesh overview */}
         <section
           className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-lg`}
         >
@@ -565,7 +644,7 @@ const App = () => {
           </div>
         </section>
 
-        {/* XP / SPN stats */}
+        {/* XP / SPN */}
         <section className="grid grid-cols-2 gap-2">
           <div
             className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center shadow-md transition hover:scale-[1.01] ${neonShadow}`}
@@ -579,7 +658,7 @@ const App = () => {
               {profileData.xpBalance.toLocaleString()}
             </p>
             <p className="text-[10px] text-gray-500 mt-1">
-              Used across quests & packs
+              Quests · packs · automations
             </p>
           </div>
           <div
@@ -594,12 +673,12 @@ const App = () => {
               {profileData.spawnTokenBalance.toFixed(2)}
             </p>
             <p className="text-[10px] text-gray-500 mt-1">
-              Future onchain rewards
+              Future mesh rewards
             </p>
           </div>
         </section>
 
-        {/* Daily streak */}
+        {/* Streak */}
         <section
           className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
         >
@@ -633,7 +712,9 @@ const App = () => {
           <div className="w-full bg-gray-900 rounded-full h-1.5">
             <div
               className={`h-1.5 rounded-full ${neonBg} transition-all duration-1000`}
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                width: `${progressPercent}%`,
+              }}
             ></div>
           </div>
           <button className="w-full text-[11px] text-center text-red-400/80 hover:text-red-300 pt-1 flex items-center justify-center gap-1">
@@ -642,7 +723,7 @@ const App = () => {
           </button>
         </section>
 
-        {/* Gas & earnings (compact) */}
+        {/* Gas & earnings */}
         <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <div
             className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl shadow-md`}
@@ -725,7 +806,7 @@ const App = () => {
               Oracle feed
             </h3>
             <span className="text-[10px] text-gray-500">
-              Phase 1 · Signals only
+              Phase 1 · Signals
             </span>
           </div>
           <div className="space-y-1.5">
@@ -734,7 +815,9 @@ const App = () => {
                 key={index}
                 className="flex items-start gap-2 px-3 py-2 bg-[#101018] rounded-xl border border-[#252535] shadow-sm"
               >
-                <div className="mt-0.5 flex-shrink-0">{item.icon}</div>
+                <div className="mt-0.5 flex-shrink-0">
+                  {item.icon}
+                </div>
                 <span className="text-[11px] text-gray-200 leading-snug">
                   {item.message}
                 </span>
@@ -747,16 +830,22 @@ const App = () => {
   };
 
   const LootTab = () => {
+    const [lootView, setLootView] = useState('packs'); // 'packs' | 'lab' | 'inventory'
+
     const getItemCount = (type) => {
-      const item = inventory.find((i) => i.id === type.toLowerCase());
+      const item = inventory.find(
+        (i) => i.id === type.toLowerCase()
+      );
       return item ? item.count : 0;
     };
 
     const starterPack =
-      inventory.find((i) => i.id === 'startermeshpack') || {
+      inventory.find(
+        (i) => i.id === 'startermeshpack'
+      ) || {
         id: 'startermeshpack',
         count: 1,
-        type: 'Starter Mesh Pack'
+        type: 'Starter Mesh Pack',
       };
     const fragments = getItemCount('Fragment');
     const shards = getItemCount('Shard');
@@ -765,10 +854,13 @@ const App = () => {
     const handleSynthesis = async () => {
       if (!db || !userId) return;
       if (fragments < 3)
-        return showToast('Not enough Fragments (3 needed).', 'error');
+        return showToast(
+          'Not enough Fragments (3 needed).',
+          'error'
+        );
 
       try {
-        await runTransaction(db, async (transaction) => {
+        await runTransaction(db, async (tx) => {
           const fragRef = doc(
             db,
             getUserInventoryPath(userId),
@@ -780,164 +872,288 @@ const App = () => {
             'shard'
           );
 
-          transaction.update(fragRef, { count: fragments - 3 });
+          tx.update(fragRef, {
+            count: fragments - 3,
+          });
 
-          const shardDoc = await transaction.get(shardRef);
-          const currentShardCount = shardDoc.exists()
+          const shardDoc = await tx.get(shardRef);
+          const currentShard = shardDoc.exists()
             ? shardDoc.data().count
             : 0;
 
-          transaction.set(
+          tx.set(
             shardRef,
             {
               type: 'Shard',
-              count: currentShardCount + 1,
-              lastAcquired: Timestamp.now()
+              count: currentShard + 1,
+              lastAcquired: Timestamp.now(),
             },
             { merge: true }
           );
 
-          showToast('Synthesis successful! 3 Fragments → 1 Shard.', 'success');
+          showToast(
+            'Synthesis successful! 3 Fragments → 1 Shard.',
+            'success'
+          );
         });
       } catch (e) {
         console.error('Synthesis failed:', e);
-        showToast('Synthesis failed. Please try again.', 'error');
+        showToast(
+          'Synthesis failed. Please try again.',
+          'error'
+        );
       }
     };
 
+    const sortedInventory = [...inventory].sort((a, b) =>
+      a.id.localeCompare(b.id)
+    );
+
     return (
       <div className="space-y-4">
+        {/* Loot sub-tabs */}
         <div className="flex justify-around bg-[#101018] px-1 py-1 rounded-2xl border border-[#26263A] shadow-inner text-[11px]">
           <button
-            className={`w-1/3 py-1.5 rounded-lg ${neonBg}/10 ${neon} font-semibold`}
+            onClick={() => setLootView('packs')}
+            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
+              lootView === 'packs'
+                ? `${neonBg}/10 ${neon} border border-[#00FFC0]`
+                : 'text-gray-400 hover:bg-gray-800'
+            }`}
           >
             Packs
           </button>
-          <button className="w-1/3 py-1.5 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
+          <button
+            onClick={() => setLootView('lab')}
+            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
+              lootView === 'lab'
+                ? 'bg-blue-600/15 text-blue-300 border border-blue-600'
+                : 'text-gray-400 hover:bg-gray-800'
+            }`}
+          >
             Pull lab
           </button>
-          <button className="w-1/3 py-1.5 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
+          <button
+            onClick={() => setLootView('inventory')}
+            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
+              lootView === 'inventory'
+                ? 'bg-gray-800 text-gray-100 border border-gray-600'
+                : 'text-gray-400 hover:bg-gray-800'
+            }`}
+          >
             Inventory
           </button>
         </div>
 
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
-        >
-          <div className="flex justify-between items-start">
-            <div>
-              <h3 className="text-sm font-semibold text-white">
-                Starter mesh pack
-              </h3>
-              <p className="text-[11px] text-gray-400">
-                Base pack with guaranteed Fragments and a chance for Shards.
-              </p>
+        {/* Packs view */}
+        {lootView === 'packs' && (
+          <section
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+          >
+            <div className="flex justify-between items-start">
+              <div>
+                <h3 className="text-sm font-semibold text-white">
+                  Starter mesh pack
+                </h3>
+                <p className="text-[11px] text-gray-400">
+                  Base pack with guaranteed Fragments and a
+                  chance for Shards.
+                </p>
+              </div>
+              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-200 border border-gray-700">
+                ID: S001
+              </span>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-200 border border-gray-700">
-              ID: S001
-            </span>
-          </div>
-          <div className="flex justify-between items-center pt-2 border-t border-gray-800">
-            <span className={`text-xl font-extrabold ${neon}`}>
-              {starterPack.count} left
-            </span>
+            <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+              <span
+                className={`text-xl font-extrabold ${neon}`}
+              >
+                {starterPack.count} left
+              </span>
+              <button
+                onClick={() =>
+                  handlePackOpen(starterPack.id)
+                }
+                disabled={starterPack.count <= 0}
+                className={`px-3 py-1.5 rounded-lg font-semibold text-[11px] border transition ${
+                  starterPack.count > 0
+                    ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/40`
+                    : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                }`}
+              >
+                Simulate open
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* Pull lab view */}
+        {lootView === 'lab' && (
+          <section
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-3 shadow-md`}
+          >
+            <div className="flex items-center justify-between">
+              <h3
+                className={`text-sm font-semibold ${accentBlue}`}
+              >
+                Pull lab · synthesis
+              </h3>
+              <span className="text-[10px] text-gray-500">
+                3 Fragments → 1 Shard
+              </span>
+            </div>
+            <p className="text-[11px] text-gray-400">
+              Upgrade low-tier loot into Shards. Relics stay
+              mythic and non-burnable. Perfect hook for creator
+              bounties and future jackpots.
+            </p>
+
+            <div className="grid grid-cols-3 text-center text-xs pt-2 border-t border-gray-800/50">
+              <div className="p-2 border-r border-gray-800">
+                <p className="text-xl font-bold text-white">
+                  {fragments}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Fragments
+                </p>
+              </div>
+              <div className="p-2 border-r border-gray-800">
+                <p
+                  className={`text-xl font-bold ${accentBlue}`}
+                >
+                  {shards}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Shards
+                </p>
+              </div>
+              <div className="p-2">
+                <p className="text-xl font-bold text-red-400">
+                  {relics}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Relics
+                </p>
+              </div>
+            </div>
+
             <button
-              onClick={() => handlePackOpen(starterPack.id)}
-              disabled={starterPack.count <= 0}
-              className={`px-3 py-1.5 rounded-lg font-semibold text-[11px] border transition ${
-                starterPack.count > 0
-                  ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/40`
+              onClick={handleSynthesis}
+              disabled={fragments < 3}
+              className={`w-full px-3 py-1.75 rounded-lg font-semibold text-[11px] border transition ${
+                fragments >= 3
+                  ? 'bg-blue-600/20 text-blue-300 border-blue-600 hover:bg-blue-600/40'
                   : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
               }`}
             >
-              Simulate open
+              Run synthesis (3 → 1)
             </button>
-          </div>
-        </section>
+          </section>
+        )}
 
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-3 shadow-md`}
-        >
-          <div className="flex items-center justify-between">
-            <h3 className={`text-sm font-semibold ${accentBlue}`}>
-              Pull lab · synthesis
-            </h3>
-            <span className="text-[10px] text-gray-500">
-              3 Fragments → 1 Shard
-            </span>
-          </div>
-          <p className="text-[11px] text-gray-400">
-            Combine lower-tier fragments into shards. Relics remain mythic and
-            non-burnable.
-          </p>
-
-          <div className="grid grid-cols-3 text-center text-xs pt-2 border-t border-gray-800/50">
-            <div className="p-2 border-r border-gray-800">
-              <p className="text-xl font-bold text-white">{fragments}</p>
-              <p className="text-[10px] text-gray-400">Fragments</p>
-            </div>
-            <div className="p-2 border-r border-gray-800">
-              <p className={`text-xl font-bold ${accentBlue}`}>{shards}</p>
-              <p className="text-[10px] text-gray-400">Shards</p>
-            </div>
-            <div className="p-2">
-              <p className="text-xl font-bold text-red-400">{relics}</p>
-              <p className="text-[10px] text-gray-400">Relics</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleSynthesis}
-            disabled={fragments < 3}
-            className={`w-full px-3 py-1.75 rounded-lg font-semibold text-[11px] border transition ${
-              fragments >= 3
-                ? 'bg-blue-600/20 text-blue-300 border-blue-600 hover:bg-blue-600/40'
-                : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
-            }`}
+        {/* Inventory view */}
+        {lootView === 'inventory' && (
+          <section
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
           >
-            Run synthesis
-          </button>
-        </section>
+            <div className="flex items-center justify-between mb-1">
+              <h3
+                className={`text-sm font-semibold ${accentBlue}`}
+              >
+                Inventory overview
+              </h3>
+              <span className="text-[10px] text-gray-500">
+                {sortedInventory.length} entries
+              </span>
+            </div>
+
+            {sortedInventory.length === 0 ? (
+              <p className="text-[11px] text-gray-500 text-center py-4">
+                No items yet. Open packs or run bounties to fill
+                this up.
+              </p>
+            ) : (
+              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
+                {sortedInventory.map((item) => (
+                  <div
+                    key={item.id}
+                    className="flex justify-between items-center px-2.5 py-1.75 rounded-xl bg-[#101018] border border-gray-800 text-[11px]"
+                  >
+                    <div className="flex flex-col">
+                      <span className="font-semibold text-white">
+                        {item.type || item.id}
+                      </span>
+                      <span className="text-[10px] text-gray-500 font-mono">
+                        {item.id}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <p className={`${neon} font-bold`}>
+                        x{item.count ?? 0}
+                      </p>
+                      {item.lastAcquired && (
+                        <p className="text-[10px] text-gray-500">
+                          recent
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </section>
+        )}
       </div>
     );
   };
 
   const QuestsTab = () => {
-    const quests = [
+    const [isSpinning, setIsSpinning] = useState(false);
+    const [lastJackpotResult, setLastJackpotResult] =
+      useState(null);
+
+    const dailyQuests = [
       {
         type: 'Daily',
         title: 'Daily check-in (completed)',
         reward: 10,
-        status: 'Completed'
+        status: 'Completed',
       },
       {
         type: 'Daily',
         title: 'Open 1 pack',
         reward: 25,
-        status: 'Claimable'
+        status: 'Claimable',
       },
+    ];
+
+    // Creator bounties – “do this, win this”
+    const creatorBounties = [
       {
-        type: 'Weekly',
-        title: '5 day streak run',
+        title: 'Create & mint a new Base token',
         reward: 150,
-        status: 'Locked'
+        status: 'Locked',
+        desc: 'Use any creator platform, link it in SupCast, and tag your mesh ID.',
       },
       {
-        type: 'Weekly',
-        title: 'Solve 1 SupCast case',
-        reward: 100,
-        status: 'Claimable'
-      },
-      {
-        type: 'IRL',
-        title: 'Base builders meetup (Stockholm)',
+        title: 'Deploy & shill a pack series',
         reward: 200,
-        status: 'Locked'
-      }
+        status: 'Locked',
+        desc: 'Launch any pack collection and share a Farcaster cast with your pulls.',
+      },
+      {
+        title: 'Help another creator via SupCast',
+        reward: 100,
+        status: 'Claimable',
+        desc: 'Solve one SupCast case with a real fix (wallet / pack / XP issue).',
+      },
     ];
 
     const handleClaim = (questTitle) => {
-      showToast(`Reward for "${questTitle}" claimed! XP added.`, 'success');
+      showToast(
+        `Reward for "${questTitle}" claimed! XP added.`,
+        'success'
+      );
     };
 
     const getStatusStyle = (status) => {
@@ -952,80 +1168,172 @@ const App = () => {
       }
     };
 
+    const handleJackpotSpin = () => {
+      if (isSpinning) return;
+      setIsSpinning(true);
+
+      const r = Math.random();
+      let result =
+        'Base XP: +15 XP added to your mesh.';
+      if (r < 0.03) {
+        result =
+          '🎰 JACKPOT! +500 XP & 1 Relic ticket (mock).';
+      } else if (r < 0.2) {
+        result =
+          'Nice hit: +120 XP & 1 Shard ticket (mock).';
+      }
+
+      setLastJackpotResult(result);
+      showToast(result, 'success');
+
+      setTimeout(() => {
+        setIsSpinning(false);
+      }, 700);
+    };
+
     return (
       <div className="space-y-4">
         <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
-          Quest matrix
+          Quest matrix · creator bounties
         </h2>
 
+        {/* Daily quests */}
         <section className="space-y-2">
           <h3 className={`text-xs font-semibold ${accentBlue}`}>
             Daily goals
           </h3>
-          {quests
-            .filter((q) => q.type === 'Daily')
-            .map((quest, index) => (
-              <div
-                key={index}
-                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
-              >
-                <div className="space-y-0.5">
-                  <p className="text-[12px] font-semibold text-white">
-                    {quest.title}
-                  </p>
-                  <p className="text-[11px] text-gray-400 flex items-center">
-                    <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
-                    {quest.reward} XP
-                  </p>
-                </div>
-                <button
-                  onClick={() =>
-                    quest.status === 'Claimable' && handleClaim(quest.title)
-                  }
-                  disabled={quest.status !== 'Claimable'}
-                  className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
-                    quest.status
-                  )}`}
-                >
-                  {quest.status}
-                </button>
+          {dailyQuests.map((quest, index) => (
+            <div
+              key={index}
+              className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
+            >
+              <div className="space-y-0.5">
+                <p className="text-[12px] font-semibold text-white">
+                  {quest.title}
+                </p>
+                <p className="text-[11px] text-gray-400 flex items-center">
+                  <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
+                  {quest.reward} XP
+                </p>
               </div>
-            ))}
+              <button
+                onClick={() =>
+                  quest.status === 'Claimable' &&
+                  handleClaim(quest.title)
+                }
+                disabled={quest.status !== 'Claimable'}
+                className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
+                  quest.status
+                )}`}
+              >
+                {quest.status}
+              </button>
+            </div>
+          ))}
         </section>
 
+        {/* Creator bounties */}
         <section className="space-y-2">
           <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Weekly / IRL
+            Creator bounties
           </h3>
-          {quests
-            .filter((q) => q.type !== 'Daily')
-            .map((quest, index) => (
-              <div
-                key={index}
-                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
-              >
+          {creatorBounties.map((bounty, idx) => (
+            <div
+              key={idx}
+              className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
+            >
+              <div className="flex justify-between items-start mb-1">
                 <div className="space-y-0.5">
                   <p className="text-[12px] font-semibold text-white">
-                    {quest.title}
+                    {bounty.title}
                   </p>
-                  <p className="text-[11px] text-gray-400 flex items-center">
-                    <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
-                    {quest.reward} XP
+                  <p className="text-[11px] text-gray-400">
+                    {bounty.desc}
                   </p>
                 </div>
+                <span className="text-[11px] text-gray-300 flex items-center">
+                  <Star className="w-3 h-3 mr-1 text-yellow-400" />
+                  {bounty.reward} XP
+                </span>
+              </div>
+              <div className="flex justify-between items-center mt-1">
+                <span className="text-[10px] text-gray-500">
+                  Turn your onchain work into XP streams.
+                </span>
                 <button
                   onClick={() =>
-                    quest.status === 'Claimable' && handleClaim(quest.title)
+                    bounty.status === 'Claimable' &&
+                    handleClaim(bounty.title)
                   }
-                  disabled={quest.status !== 'Claimable'}
+                  disabled={bounty.status !== 'Claimable'}
                   className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
-                    quest.status
+                    bounty.status
                   )}`}
                 >
-                  {quest.status}
+                  {bounty.status}
                 </button>
               </div>
-            ))}
+            </div>
+          ))}
+        </section>
+
+        {/* Daily jackpot – “soft casino” */}
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        >
+          <div className="flex items-center justify-between mb-1">
+            <div className="flex items-center gap-2">
+              <span className="text-lg">🎰</span>
+              <div className="flex flex-col">
+                <h3 className="text-sm font-semibold text-white">
+                  Daily XP jackpot
+                </h3>
+                <p className="text-[10px] text-gray-400">
+                  Spin once per day · XP-only simulation.
+                </p>
+              </div>
+            </div>
+            <span className="text-[10px] text-gray-500">
+              House edge: just vibes
+            </span>
+          </div>
+
+          <div className="flex justify-between items-center text-[11px]">
+            <div className="space-y-0.5">
+              <p className="text-gray-400">
+                Chance breakdown
+              </p>
+              <p className="text-gray-300">
+                3%{' '}
+                <span className="text-[#00FFC0]">
+                  jackpot
+                </span>{' '}
+                · 17% good hit · 80% base XP
+              </p>
+            </div>
+            <button
+              onClick={handleJackpotSpin}
+              disabled={isSpinning}
+              className={`px-3 py-1.75 rounded-full font-semibold text-[11px] border transition ${
+                isSpinning
+                  ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                  : 'bg-purple-600/30 text-purple-200 border border-purple-600 hover:bg-purple-600/50'
+              }`}
+            >
+              {isSpinning ? 'Spinning...' : 'Spin daily'}
+            </button>
+          </div>
+
+          {lastJackpotResult && (
+            <div className="mt-2 px-2.5 py-2 rounded-xl bg-[#101018] border border-gray-700 text-[11px] text-gray-200">
+              {lastJackpotResult}
+            </div>
+          )}
+
+          <p className="text-[10px] text-gray-500">
+            This is just a visual layer. Real onchain jackpot
+            logic will live in future Pack / XP contracts.
+          </p>
         </section>
       </div>
     );
@@ -1038,31 +1346,43 @@ const App = () => {
         name: 'Alpha hunters',
         desc:
           'Track wallets with aggressive pack / creator token activity across Base.',
-        icon: ShieldCheck
+        icon: ShieldCheck,
       },
       {
         id: 'new',
         name: 'New creators',
         desc:
           'Surface tokens and packs launched via zero-code builders & miniapps.',
-        icon: Zap
+        icon: Zap,
       },
       {
         id: 'gravity',
         name: 'Gravity clusters',
         desc:
           'Visualize clusters of wallets with the highest XP flow and SPN exposure.',
-        icon: Globe
-      }
+        icon: Globe,
+      },
     ];
 
     const [activeMode, setActiveMode] = useState(modes[0]);
 
     const legendItems = [
       { color: neon, name: 'XP streams', icon: Activity },
-      { color: accentBlue, name: 'Pack pulls', icon: Box },
-      { color: 'text-red-500', name: 'Burn events', icon: Flame },
-      { color: 'text-yellow-400', name: 'Creator flows', icon: DollarSign }
+      {
+        color: accentBlue,
+        name: 'Pack pulls',
+        icon: Box,
+      },
+      {
+        color: 'text-red-500',
+        name: 'Burn events',
+        icon: Flame,
+      },
+      {
+        color: 'text-yellow-400',
+        name: 'Creator flows',
+        icon: DollarSign,
+      },
     ];
 
     return (
@@ -1088,7 +1408,9 @@ const App = () => {
               >
                 <mode.icon
                   className={`w-4 h-4 mx-auto mb-1 ${
-                    activeMode.id === mode.id ? neon : 'text-gray-400'
+                    activeMode.id === mode.id
+                      ? neon
+                      : 'text-gray-400'
                   }`}
                 />
                 <span className="font-semibold text-white">
@@ -1117,7 +1439,9 @@ const App = () => {
                 key={index}
                 className="flex items-center gap-2 text-gray-300"
               >
-                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+                <item.icon
+                  className={`w-3.5 h-3.5 ${item.color}`}
+                />
                 <span>{item.name}</span>
               </div>
             ))}
@@ -1146,6 +1470,7 @@ const App = () => {
           SupCast network
         </h2>
 
+        {/* Ask */}
         <section
           className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
         >
@@ -1156,28 +1481,41 @@ const App = () => {
             type="text"
             placeholder="Short title of the problem"
             value={newCaseTitle}
-            onChange={(e) => setNewCaseTitle(e.target.value)}
+            onChange={(e) =>
+              setNewCaseTitle(e.target.value)
+            }
             className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 text-[12px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
           />
           <textarea
             placeholder="Describe your problem (wallet, chain, error code...)"
             value={newCaseDesc}
-            onChange={(e) => setNewCaseDesc(e.target.value)}
+            onChange={(e) =>
+              setNewCaseDesc(e.target.value)
+            }
             className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 h-20 text-[12px] text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
           />
           <button
             onClick={handlePostCase}
-            disabled={!newCaseTitle || !newCaseDesc || isPostingCase}
+            disabled={
+              !newCaseTitle ||
+              !newCaseDesc ||
+              isPostingCase
+            }
             className={`w-full py-2.25 rounded-lg font-semibold text-[11px] border transition ${
-              !newCaseTitle || !newCaseDesc || isPostingCase
+              !newCaseTitle ||
+              !newCaseDesc ||
+              isPostingCase
                 ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
                 : 'bg-red-600/30 border-red-700 text-red-300 hover:bg-red-600/50'
             }`}
           >
-            {isPostingCase ? 'Posting...' : 'Post to SupCast mesh'}
+            {isPostingCase
+              ? 'Posting...'
+              : 'Post to SupCast mesh'}
           </button>
         </section>
 
+        {/* Feed */}
         <section className="space-y-2">
           <h3 className={`text-xs font-semibold ${accentBlue}`}>
             Open questions ({supCastFeed.length})
@@ -1195,7 +1533,8 @@ const App = () => {
                 <div className="flex-1 pr-2">
                   <span className="text-[10px] font-mono text-gray-500">
                     {item.posterHandle || '@mesh-user'} (
-                    {item.posterId?.substring(0, 4) || '0000'}
+                    {item.posterId?.substring(0, 4) ||
+                      '0000'}
                     ...)
                   </span>
                   <p className="text-[12px] font-semibold text-white mt-0.5">
@@ -1221,6 +1560,7 @@ const App = () => {
           )}
         </section>
 
+        {/* Profile */}
         <section
           className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center space-y-2 shadow-md`}
         >
@@ -1232,19 +1572,27 @@ const App = () => {
               <p className={`text-xl font-extrabold ${neon}`}>
                 {userProfile.xp}
               </p>
-              <p className="text-[10px] text-gray-400">Support XP</p>
+              <p className="text-[10px] text-gray-400">
+                Support XP
+              </p>
             </div>
             <div>
-              <p className={`text-xl font-extrabold ${accentBlue}`}>
+              <p
+                className={`text-xl font-extrabold ${accentBlue}`}
+              >
                 {userProfile.solved}
               </p>
-              <p className="text-[10px] text-gray-400">Solved</p>
+              <p className="text-[10px] text-gray-400">
+                Solved
+              </p>
             </div>
             <div>
               <p className="text-xl font-extrabold text-yellow-400">
                 {userProfile.rating}
               </p>
-              <p className="text-[10px] text-gray-400">Rating</p>
+              <p className="text-[10px] text-gray-400">
+                Rating
+              </p>
             </div>
           </div>
         </section>
@@ -1253,7 +1601,6 @@ const App = () => {
   };
 
   // --- SHEETS & NAV ---
-
   const NavItem = ({ icon: Icon, tabName, label }) => (
     <button
       onClick={() => setCurrentTab(tabName)}
@@ -1264,24 +1611,35 @@ const App = () => {
       }`}
     >
       <Icon className="w-5 h-5" />
-      <span className="text-[10px] mt-0.5">{label}</span>
+      <span className="text-[10px] mt-0.5">
+        {label}
+      </span>
     </button>
   );
 
   const Sheet = ({ id, title, children }) => (
     <div
       className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm sm:max-w-md h-[88vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duration-500 ease-out z-50 overflow-y-auto px-3 pt-1 pb-4 ${
-        activeSheet === id ? 'translate-y-0' : 'translate-y-full'
+        activeSheet === id
+          ? 'translate-y-0'
+          : 'translate-y-full'
       }`}
     >
-      <div
-        className="w-full flex justify-center py-2 cursor-pointer"
-        onClick={() => setActiveSheet(null)}
-      >
-        <div className="h-1.5 w-10 bg-gray-600 rounded-full"></div>
+      <div className="w-full flex justify-center py-2">
+        <div className="h-1.5 w-10 bg-gray-600 rounded-full" />
       </div>
       <div className="px-1">
-        <h2 className={`text-base font-bold mb-3 ${neon}`}>{title}</h2>
+        <div className="flex items-center justify-between mb-2">
+          <h2 className={`text-base font-bold ${neon}`}>
+            {title}
+          </h2>
+          <button
+            onClick={() => setActiveSheet(null)}
+            className="p-1 rounded-full hover:bg-[#11111A] text-gray-400 hover:text-gray-100"
+          >
+            <X className="w-4 h-4" />
+          </button>
+        </div>
         {children}
       </div>
     </div>
@@ -1292,17 +1650,20 @@ const App = () => {
       <div
         className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl flex items-center gap-3 mb-4 shadow-md`}
       >
-        <div
-          className={`w-9 h-9 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white`}
-        >
+        <div className="w-9 h-9 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white">
           S
         </div>
         <div className="space-y-0.5">
-          <p className="text-sm font-semibold text-white">@spawniz</p>
+          <p className="text-sm font-semibold text-white">
+            @spawniz
+          </p>
           <p className="text-[11px] text-gray-400">
             Mesh ID:{' '}
             {userId
-              ? `${userId.substring(0, 4)}...${userId.substring(
+              ? `${userId.substring(
+                  0,
+                  4
+                )}...${userId.substring(
                   userId.length - 4
                 )}`
               : 'Loading...'}
@@ -1317,7 +1678,9 @@ const App = () => {
         <div
           className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
         >
-          <p className="text-[11px] text-gray-400">Total XP</p>
+          <p className="text-[11px] text-gray-400">
+            Total XP
+          </p>
           <p className={`text-xl font-bold ${neon}`}>
             {profileData.xpBalance.toLocaleString()}
           </p>
@@ -1325,7 +1688,9 @@ const App = () => {
         <div
           className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
         >
-          <p className="text-[11px] text-gray-400">SPN balance</p>
+          <p className="text-[11px] text-gray-400">
+            SPN balance
+          </p>
           <p className={`text-xl font-bold ${accentBlue}`}>
             {profileData.spawnTokenBalance.toFixed(2)}
           </p>
@@ -1339,8 +1704,8 @@ const App = () => {
           Referral system
         </h3>
         <p className="text-[11px] text-gray-400">
-          Share your mesh code to earn XP when friends interact with creator
-          tokens and packs.
+          Share your mesh code to earn XP when friends
+          interact with creator tokens and packs.
         </p>
         <div className="flex items-center justify-between bg-[#101018] px-3 py-2 rounded-xl border border-gray-700">
           <span className={`font-mono ${neon} text-[11px]`}>
@@ -1354,9 +1719,12 @@ const App = () => {
         </div>
       </div>
 
-      <button className="w-full py-2.5 mt-5 bg-red-700/40 rounded-2xl font-semibold text-[11px] border border-red-700 text-white/80 hover:bg-red-700/60 transition flex items-center justify-center gap-1.5">
+      <button
+        onClick={() => setActiveSheet(null)}
+        className="w-full py-2.5 mt-5 bg-red-700/40 rounded-2xl font-semibold text-[11px] border border-red-700 text-white/80 hover:bg-red-700/60 transition flex items-center justify-center gap-1.5"
+      >
         <LogOut className="w-4 h-4" />
-        <span>Switch wallet / logout (soon)</span>
+        <span>Close & return to HUD</span>
       </button>
     </Sheet>
   );
@@ -1371,7 +1739,8 @@ const App = () => {
             XP SDK & integration
           </h3>
           <p className="text-[11px] text-gray-400">
-            Connect SpawnEngine XP to your own apps, bots or frames.
+            Connect SpawnEngine XP to your own apps, bots or
+            frames.
           </p>
           <button
             className={`w-full py-2 text-[11px] ${neonBg}/10 rounded-xl font-semibold ${neon} border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition`}
@@ -1387,7 +1756,8 @@ const App = () => {
             Premium mesh filters
           </h3>
           <p className="text-[11px] text-gray-400">
-            Unlock Alpha Hunters, whale alerts and advanced pack analytics.
+            Unlock Alpha Hunters, whale alerts and advanced
+            pack analytics.
           </p>
           <button className="w-full py-2 text-[11px] bg-gray-800 rounded-xl font-semibold text-gray-500 border border-gray-700 cursor-not-allowed">
             Upgrade to premium (soon)
@@ -1401,7 +1771,8 @@ const App = () => {
             Launchpad builder
           </h3>
           <p className="text-[11px] text-gray-400">
-            Future zero-code deployer for creator tokens, packs & quests.
+            Future zero-code deployer for creator tokens, packs
+            & quests.
           </p>
           <button className="w-full py-2 text-[11px] bg-blue-600/20 rounded-xl font-semibold text-blue-300 border border-blue-600 hover:bg-blue-600/40 transition">
             Open creator panel (design only)
@@ -1415,12 +1786,12 @@ const App = () => {
     </Sheet>
   );
 
-  // --- RENDER TAB CONTENT ---
+  // --- RENDER ---
   const renderTabContent = () => {
     if (!isAuthReady || isLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-48 gap-2">
-          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#00FFC0]"></div>
+          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#00FFC0]" />
           <p className="text-[12px] text-gray-300">
             Loading mesh data...
           </p>
@@ -1444,7 +1815,6 @@ const App = () => {
     }
   };
 
-  // --- MAIN APP ---
   return (
     <div className={`min-h-screen ${darkBg} flex justify-center`}>
       <style>
@@ -1484,7 +1854,7 @@ const App = () => {
             <div className="flex items-center gap-2">
               <span
                 className={`w-2 h-2 rounded-full ${neonBg} ${neonShadow}`}
-              ></span>
+              />
               <span
                 className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/60 shadow-sm`}
               >
@@ -1512,19 +1882,28 @@ const App = () => {
             </div>
             <div className="flex justify-between text-[10px] font-mono text-gray-500 border-y border-gray-800 py-1 px-1">
               <span>
-                GAS: <span className="text-gray-100">0.05 gwei</span>
+                GAS:{' '}
+                <span className="text-gray-100">
+                  0.05 gwei
+                </span>
               </span>
               <span>
-                MODE: <span className="text-gray-100">Alpha hunter</span>
+                MODE:{' '}
+                <span className="text-gray-100">
+                  Alpha hunter
+                </span>
               </span>
               <span>
-                WALLETS: <span className="text-gray-100">4 linked</span>
+                WALLETS:{' '}
+                <span className="text-gray-100">
+                  4 linked
+                </span>
               </span>
             </div>
           </div>
         </header>
 
-        {/* Tabs */}
+        {/* Main */}
         <main id="tab-content" className="flex-grow pb-2">
           {renderTabContent()}
         </main>
