@@ -70,7 +70,6 @@ const App = () => {
   const [currentTab, setCurrentTab] = useState('home');
   const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings'
   const [toast, setToast] = useState(null);
-  const [isLoading, setIsLoading] = useState(true);
 
   const [profileData, setProfileData] = useState({
     xpBalance: 0,
@@ -145,7 +144,7 @@ const App = () => {
             } catch (e) {
               console.error('Auth failed:', e);
               showToast(
-                'Authentication failed. Check logs.',
+                'Authentication failed. Running in local mode.',
                 'error'
               );
               setIsAuthReady(true);
@@ -157,14 +156,14 @@ const App = () => {
       return () => unsub();
     } catch (e) {
       console.error('Firebase Initialization Error:', e);
+      // Kör ändå UI i "offline/mock"
       setIsAuthReady(true);
     }
   }, [showToast]);
 
-  // --- SNAPSHOTS ---
+  // --- SNAPSHOTS (om Firebase funkar) ---
   useEffect(() => {
     if (!isAuthReady || !userId || !db) return;
-    setIsLoading(true);
 
     // Profile
     const profileRef = doc(db, getUserProfilePath(userId));
@@ -201,12 +200,10 @@ const App = () => {
             );
           });
         }
-        setIsLoading(false);
       },
       (err) => {
         console.error('Profile Snapshot Error:', err);
         showToast('Error loading profile data.', 'error');
-        setIsLoading(false);
       }
     );
 
@@ -292,13 +289,39 @@ const App = () => {
       profileData.lastCheckIn.getTime() +
       24 * 60 * 60 * 1000;
     const diff = next - Date.now();
-    if (diff <= 0) return 0;
+    if (diff <= 0) return 24;
     return 24 - diff / (1000 * 60 * 60);
   }, [profileData.lastCheckIn]);
 
   // --- CORE ACTIONS ---
   const handleCheckIn = useCallback(async () => {
-    if (!db || !userId) return;
+    if (!db || !userId) {
+      // Lokal mock bara
+      const now = new Date();
+      const last = profileData.lastCheckIn;
+      const ready =
+        !last ||
+        now.getTime() - last.getTime() >=
+          24 * 60 * 60 * 1000;
+      if (!ready) {
+        return showToast(
+          'Daily check-in already used (mock).',
+          'info'
+        );
+      }
+      const newStreak = (profileData.streakDays || 0) + 1;
+      const reward = 50 + (newStreak - 1) * 5;
+      setProfileData((prev) => ({
+        ...prev,
+        streakDays: newStreak,
+        xpBalance: prev.xpBalance + reward,
+        lastCheckIn: now,
+      }));
+      return showToast(
+        `Day ${newStreak} check-in (mock): +${reward} XP`,
+        'success'
+      );
+    }
 
     const profileRef = doc(db, getUserProfilePath(userId));
     const now = new Date();
@@ -372,15 +395,77 @@ const App = () => {
         'error'
       );
     }
-  }, [db, userId, profileData.lastCheckIn, showToast]);
+  }, [db, userId, profileData.lastCheckIn, profileData.streakDays, profileData.xpBalance, showToast]);
 
   const handlePackOpen = useCallback(
     async (packId) => {
-      if (!db || !userId)
-        return showToast(
-          'Platform is initializing.',
-          'error'
+      if (!db || !userId) {
+        // Lokal mock – bränn 1 pack och ge fragment/shard
+        const starter =
+          inventory.find(
+            (i) => i.id === packId
+          ) || {
+            id: packId,
+            count: 1,
+            type: 'Starter Mesh Pack',
+          };
+        if (starter.count <= 0) {
+          return showToast(
+            'No packs left to open (mock).',
+            'error'
+          );
+        }
+        const r = Math.random();
+        let rewardText = '';
+        let xpReward = 0;
+        let type = '';
+        let amount = 0;
+
+        if (r < 0.05) {
+          type = 'Relic';
+          amount = 1;
+          xpReward = 500;
+          rewardText =
+            'MYTHIC DROP! +1 Relic & 500 XP (mock).';
+        } else if (r < 0.25) {
+          type = 'Shard';
+          amount = 1;
+          xpReward = 100;
+          rewardText = '+1 Shard & 100 XP (mock).';
+        } else {
+          type = 'Fragment';
+          amount = Math.floor(Math.random() * 3) + 1;
+          xpReward = 25;
+          rewardText = `+${amount} Fragments & 25 XP (mock).`;
+        }
+
+        // uppdatera inventory/xp lokalt
+        const newInv = inventory.map((it) =>
+          it.id === packId
+            ? { ...it, count: Math.max(0, (it.count || 0) - 1) }
+            : it
         );
+        // lägg till loot
+        const lowerId = type.toLowerCase();
+        const existing = newInv.find((i) => i.id === lowerId);
+        if (existing) {
+          existing.count = (existing.count || 0) + amount;
+        } else {
+          newInv.push({
+            id: lowerId,
+            type,
+            count: amount,
+            lastAcquired: new Date(),
+          });
+        }
+
+        setInventory(newInv);
+        setProfileData((prev) => ({
+          ...prev,
+          xpBalance: prev.xpBalance + xpReward,
+        }));
+        return showToast(rewardText, 'success');
+      }
 
       try {
         await runTransaction(db, async (tx) => {
@@ -476,21 +561,40 @@ const App = () => {
         );
       }
     },
-    [db, userId, showToast]
+    [db, userId, inventory, showToast]
   );
 
   const handlePostCase = useCallback(
     async () => {
-      if (!db || !userId)
-        return showToast(
-          'Platform is initializing.',
-          'error'
-        );
       if (!newCaseTitle || !newCaseDesc)
         return showToast(
           'Title and description required.',
           'error'
         );
+
+      if (!db || !userId) {
+        // Lokal mock
+        const localCase = {
+          id: `local-${Date.now()}`,
+          title: newCaseTitle,
+          description: newCaseDesc,
+          status: 'Open',
+          posterId: 'local',
+          expertId: null,
+          timestamp: { toDate: () => new Date() },
+          posterHandle: '@local-mesh',
+        };
+        setSupCastFeed((prev) => [
+          localCase,
+          ...prev,
+        ]);
+        setNewCaseTitle('');
+        setNewCaseDesc('');
+        return showToast(
+          'Question added (local mock).',
+          'success'
+        );
+      }
 
       setIsPostingCase(true);
       try {
@@ -852,12 +956,39 @@ const App = () => {
     const relics = getItemCount('Relic');
 
     const handleSynthesis = async () => {
-      if (!db || !userId) return;
-      if (fragments < 3)
-        return showToast(
-          'Not enough Fragments (3 needed).',
-          'error'
+      if (!db || !userId) {
+        if (fragments < 3) {
+          return showToast(
+            'Not enough Fragments (3 needed).',
+            'error'
+          );
+        }
+        const newInv = [...inventory];
+        const fragIdx = newInv.findIndex(
+          (i) => i.id === 'fragment'
         );
+        if (fragIdx !== -1) {
+          newInv[fragIdx].count -= 3;
+        }
+        const shardIdx = newInv.findIndex(
+          (i) => i.id === 'shard'
+        );
+        if (shardIdx !== -1) {
+          newInv[shardIdx].count += 1;
+        } else {
+          newInv.push({
+            id: 'shard',
+            type: 'Shard',
+            count: 1,
+            lastAcquired: new Date(),
+          });
+        }
+        setInventory(newInv);
+        return showToast(
+          'Synthesis successful! 3 Fragments → 1 Shard (mock).',
+          'success'
+        );
+      }
 
       try {
         await runTransaction(db, async (tx) => {
@@ -1111,6 +1242,7 @@ const App = () => {
     const [isSpinning, setIsSpinning] = useState(false);
     const [lastJackpotResult, setLastJackpotResult] =
       useState(null);
+    const [jackpotPool, setJackpotPool] = useState(2.4); // ETH pot (mock)
 
     const dailyQuests = [
       {
@@ -1174,13 +1306,37 @@ const App = () => {
 
       const r = Math.random();
       let result =
-        'Base XP: +15 XP added to your mesh.';
+        'Base XP: +15 XP added to your mesh (mock).';
+
+      // simulera pott-rörelse
+      setJackpotPool((prev) => {
+        if (r < 0.03) {
+          // jackpot – pott minskar
+          return Math.max(0, prev - 0.5);
+        }
+        // annars pott växer lite
+        return parseFloat((prev + 0.005).toFixed(3));
+      });
+
       if (r < 0.03) {
         result =
           '🎰 JACKPOT! +500 XP & 1 Relic ticket (mock).';
+        setProfileData((prev) => ({
+          ...prev,
+          xpBalance: prev.xpBalance + 500,
+        }));
       } else if (r < 0.2) {
         result =
           'Nice hit: +120 XP & 1 Shard ticket (mock).';
+        setProfileData((prev) => ({
+          ...prev,
+          xpBalance: prev.xpBalance + 120,
+        }));
+      } else {
+        setProfileData((prev) => ({
+          ...prev,
+          xpBalance: prev.xpBalance + 15,
+        }));
       }
 
       setLastJackpotResult(result);
@@ -1301,14 +1457,21 @@ const App = () => {
           <div className="flex justify-between items-center text-[11px]">
             <div className="space-y-0.5">
               <p className="text-gray-400">
-                Chance breakdown
+                Current pot (mock)
               </p>
-              <p className="text-gray-300">
-                3%{' '}
-                <span className="text-[#00FFC0]">
-                  jackpot
+              <p className="text-gray-100 font-mono">
+                {jackpotPool.toFixed(3)} ETH on Base
+              </p>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Buy-in (mock):{' '}
+                <span className="text-[#00FFC0] font-mono">
+                  0.0003 ETH
                 </span>{' '}
-                · 17% good hit · 80% base XP
+                or{' '}
+                <span className="text-[#00FFC0] font-mono">
+                  0.25 USDC
+                </span>{' '}
+                per spin.
               </p>
             </div>
             <button
@@ -1324,6 +1487,12 @@ const App = () => {
             </button>
           </div>
 
+          <div className="flex justify-between items-center text-[10px] text-gray-500 mt-1">
+            <span>
+              Chance: 3% jackpot · 17% good hit · 80% base XP
+            </span>
+          </div>
+
           {lastJackpotResult && (
             <div className="mt-2 px-2.5 py-2 rounded-xl bg-[#101018] border border-gray-700 text-[11px] text-gray-200">
               {lastJackpotResult}
@@ -1331,8 +1500,8 @@ const App = () => {
           )}
 
           <p className="text-[10px] text-gray-500">
-            This is just a visual layer. Real onchain jackpot
-            logic will live in future Pack / XP contracts.
+            This is visual only. Real ETH/USDC pot + entry will
+            come from onchain contracts later.
           </p>
         </section>
       </div>
@@ -1666,7 +1835,7 @@ const App = () => {
                 )}...${userId.substring(
                   userId.length - 4
                 )}`
-              : 'Loading...'}
+              : 'Local mode'}
           </p>
           <p className="text-[10px] text-gray-500 font-mono">
             {userId || 'No wallet yet'}
@@ -1788,7 +1957,7 @@ const App = () => {
 
   // --- RENDER ---
   const renderTabContent = () => {
-    if (!isAuthReady || isLoading) {
+    if (!isAuthReady) {
       return (
         <div className="flex flex-col items-center justify-center h-48 gap-2">
           <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#00FFC0]" />
