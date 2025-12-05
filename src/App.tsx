@@ -1,4 +1,21 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { initializeApp } from 'firebase/app';
+import {
+  getAuth,
+  signInAnonymously,
+  signInWithCustomToken,
+  onAuthStateChanged
+} from 'firebase/auth';
+import {
+  getFirestore,
+  doc,
+  onSnapshot,
+  setDoc,
+  collection,
+  addDoc,
+  runTransaction,
+  Timestamp
+} from 'firebase/firestore';
 import {
   Home,
   Box,
@@ -9,7 +26,6 @@ import {
   Flame,
   TrendingUp,
   Star,
-  Gift,
   User,
   LogOut,
   ShieldCheck,
@@ -17,425 +33,427 @@ import {
   DollarSign,
   Activity,
   MapPin,
-  MessageSquare,
+  MessageSquare
 } from 'lucide-react';
 
+// --- GLOBAL FIREBASE CONFIGURATION (Provided by Environment) ---
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+// IMPORTANT: use __firebase_config here, not __app_id
+const firebaseConfig = JSON.parse(
+  typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'
+);
+const initialAuthToken =
+  typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+
+// Helper to get Firestore paths
+const getUserProfilePath = (userId) =>
+  `artifacts/${appId}/users/${userId}/spawn_data/profile`;
+const getUserInventoryPath = (userId) =>
+  `artifacts/${appId}/users/${userId}/spawn_data/inventory`;
+const getPublicSupCastCollectionPath = () =>
+  `artifacts/${appId}/public/data/supcast_cases`;
+
 const App = () => {
-  // --- BASIC STATE ---
+  // --- STATE MANAGEMENT ---
+  const [db, setDb] = useState(null);
+  const [auth, setAuth] = useState(null);
+  const [userId, setUserId] = useState(null);
+  const [isAuthReady, setIsAuthReady] = useState(false);
   const [currentTab, setCurrentTab] = useState('home');
-  const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings' | null
+  const [activeSheet, setActiveSheet] = useState(null); // 'account' or 'settings'
   const [toast, setToast] = useState(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  // Profile & inventory
+  // Firestore Data State
   const [profileData, setProfileData] = useState({
-    xpBalance: 2500,
-    spawnTokenBalance: 42.5,
-    streakDays: 3,
-    lastCheckIn: null, // Date | null
+    xpBalance: 0,
+    spawnTokenBalance: 0.0,
+    streakDays: 0,
+    lastCheckIn: null
   });
-
-  const [inventory, setInventory] = useState([
-    {
-      id: 'startermeshpack',
-      type: 'Starter Mesh Pack',
-      count: 3,
-    },
-    {
-      id: 'fragment',
-      type: 'Fragment',
-      count: 5,
-    },
-    {
-      id: 'shard',
-      type: 'Shard',
-      count: 1,
-    },
-    {
-      id: 'relic',
-      type: 'Relic',
-      count: 0,
-    },
-  ]);
-
+  const [inventory, setInventory] = useState([]);
   const [supCastFeed, setSupCastFeed] = useState([]);
+
+  // SupCast Form State
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDesc, setNewCaseDesc] = useState('');
   const [isPostingCase, setIsPostingCase] = useState(false);
 
-  // Simulated user id just for display
-  const [userId] = useState('spawn-mesh-1234-abcdef');
-
-  // Colors / UI tokens
+  // --- UI/UX COLORS ---
   const neon = 'text-[#00FFC0]';
   const neonBg = 'bg-[#00FFC0]';
-  const accentBlue = 'text-[#22A8FF]';
+  const neonShadow = 'shadow-[0_0_15px_rgba(0,255,192,0.25)]';
+  const accentBlue = 'text-[#00A6FF]';
+  const accentBlueBg = 'bg-[#00A6FF]';
   const darkBg = 'bg-[#050509]';
-  const cardBg = 'bg-[#101019]';
-  const borderColor = 'border-[#262636]';
+  const cardBg = 'bg-[#11111A]';
+  const borderColor = 'border-[#252535]';
 
-  // --- LOCALSTORAGE PERSISTENCE (simple) ---
-
-  useEffect(() => {
-    try {
-      const raw = window.localStorage.getItem('spawnengine_mesh_profile');
-      if (raw) {
-        const parsed = JSON.parse(raw);
-        setProfileData({
-          ...parsed,
-          lastCheckIn: parsed.lastCheckIn ? new Date(parsed.lastCheckIn) : null,
-        });
-      }
-      const invRaw = window.localStorage.getItem('spawnengine_mesh_inventory');
-      if (invRaw) {
-        setInventory(JSON.parse(invRaw));
-      }
-      const supRaw = window.localStorage.getItem('spawnengine_mesh_supcast');
-      if (supRaw) {
-        setSupCastFeed(JSON.parse(supRaw));
-      }
-    } catch (e) {
-      console.error('Failed to load local state', e);
-    }
-  }, []);
-
-  useEffect(() => {
-    try {
-      const { lastCheckIn, ...rest } = profileData;
-      window.localStorage.setItem(
-        'spawnengine_mesh_profile',
-        JSON.stringify({
-          ...rest,
-          lastCheckIn: lastCheckIn ? lastCheckIn.toISOString() : null,
-        }),
-      );
-    } catch {}
-  }, [profileData]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('spawnengine_mesh_inventory', JSON.stringify(inventory));
-    } catch {}
-  }, [inventory]);
-
-  useEffect(() => {
-    try {
-      window.localStorage.setItem('spawnengine_mesh_supcast', JSON.stringify(supCastFeed));
-    } catch {}
-  }, [supCastFeed]);
-
-  // --- TOAST ---
-
+  // --- TOASTS ---
   const showToast = useCallback((message, type = 'info') => {
     let color = 'bg-[#00FFC0]/90';
     if (type === 'error') color = 'bg-red-600/90';
     if (type === 'success') color = 'bg-[#00FFC0]/90';
-    if (type === 'info') color = 'bg-[#22A8FF]/90';
+    if (type === 'info') color = 'bg-[#00A6FF]/90';
 
     setToast({ message, color });
-    setTimeout(() => setToast(null), 2500);
+    setTimeout(() => setToast(null), 3000);
   }, []);
 
   const ToastComponent = () =>
     toast && (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs transition-all duration-300 text-xs">
+      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs transition-all duration-300">
         <div
-          className={`px-3 py-2 rounded-xl shadow-2xl font-semibold text-gray-900 backdrop-blur-sm ${toast.color}`}
+          className={`px-3 py-2 rounded-xl shadow-2xl text-xs sm:text-sm font-semibold text-gray-900 backdrop-blur-sm ${toast.color}`}
         >
           {toast.message}
         </div>
       </div>
     );
 
-  // --- CHECK-IN / STREAK LOGIC ---
+  // --- FIREBASE INITIALIZATION & AUTH ---
+  useEffect(() => {
+    try {
+      const app = initializeApp(firebaseConfig);
+      const authInstance = getAuth(app);
+      const firestoreInstance = getFirestore(app);
+      setDb(firestoreInstance);
+      setAuth(authInstance);
+
+      const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
+        if (user) {
+          setUserId(user.uid);
+          setIsAuthReady(true);
+        } else {
+          try {
+            if (initialAuthToken) {
+              await signInWithCustomToken(authInstance, initialAuthToken);
+            } else {
+              await signInAnonymously(authInstance);
+            }
+          } catch (e) {
+            console.error('Auth failed:', e);
+            showToast('Authentication failed. Check logs.', 'error');
+            setIsAuthReady(true);
+          }
+        }
+      });
+
+      return () => unsubscribe();
+    } catch (e) {
+      console.error('Firebase Initialization Error:', e);
+      setIsAuthReady(true);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // --- FIREBASE DATA LISTENERS ---
+  useEffect(() => {
+    if (!isAuthReady || !userId || !db) return;
+    setIsLoading(true);
+
+    // Profile
+    const profileRef = doc(db, getUserProfilePath(userId));
+    const unsubscribeProfile = onSnapshot(
+      profileRef,
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          setProfileData((prev) => ({
+            ...prev,
+            xpBalance: data.xpBalance || 0,
+            spawnTokenBalance: data.spawnTokenBalance || 0.0,
+            streakDays: data.streakDays || 0,
+            lastCheckIn:
+              data.lastCheckIn instanceof Timestamp
+                ? data.lastCheckIn.toDate()
+                : null
+          }));
+        } else {
+          const initialData = {
+            xpBalance: 100,
+            spawnTokenBalance: 5.0,
+            streakDays: 1,
+            lastCheckIn: Timestamp.now()
+          };
+          setDoc(profileRef, initialData).then(() => {
+            setProfileData({
+              ...initialData,
+              lastCheckIn: new Date()
+            });
+            showToast(
+              'Welcome to SpawnEngine! Initial XP & SPN credited.',
+              'success'
+            );
+          });
+        }
+        setIsLoading(false);
+      },
+      (error) => {
+        console.error('Profile Snapshot Error:', error);
+        showToast('Error loading profile data.', 'error');
+        setIsLoading(false);
+      }
+    );
+
+    // Inventory
+    const inventoryColRef = collection(db, getUserInventoryPath(userId));
+    const unsubscribeInventory = onSnapshot(
+      inventoryColRef,
+      (snapshot) => {
+        const newInventory = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+        setInventory(newInventory);
+      },
+      (error) => {
+        console.error('Inventory Snapshot Error:', error);
+        showToast('Error loading inventory.', 'error');
+      }
+    );
+
+    // SupCast (public)
+    const supCastColRef = collection(db, getPublicSupCastCollectionPath());
+    const unsubscribeSupCast = onSnapshot(
+      supCastColRef,
+      (snapshot) => {
+        const feed = snapshot.docs.map((docSnap) => ({
+          id: docSnap.id,
+          ...docSnap.data()
+        }));
+        feed.sort(
+          (a, b) =>
+            (b.timestamp?.toDate()?.getTime() || 0) -
+            (a.timestamp?.toDate()?.getTime() || 0)
+        );
+        setSupCastFeed(feed.slice(0, 50));
+      },
+      (error) => {
+        console.error('SupCast Snapshot Error:', error);
+        showToast('Error loading SupCast feed.', 'error');
+      }
+    );
+
+    return () => {
+      unsubscribeProfile();
+      unsubscribeInventory();
+      unsubscribeSupCast();
+    };
+  }, [isAuthReady, userId, db, showToast]);
+
+  // --- HELPERS ---
+  const formatTimeRemaining = (lastCheckIn) => {
+    if (!lastCheckIn) return 'Ready now';
+    const nextCheckIn = lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
+    const timeRemainingMs = nextCheckIn - new Date().getTime();
+    if (timeRemainingMs <= 0) return 'Ready now';
+
+    const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
+    const minutes = Math.floor(
+      (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
+    );
+    return `${hours}h ${minutes}m`;
+  };
 
   const streakReady = useMemo(() => {
     if (!profileData.lastCheckIn) return true;
-    const delta = Date.now() - profileData.lastCheckIn.getTime();
-    return delta >= 24 * 60 * 60 * 1000;
+    return (
+      new Date().getTime() - profileData.lastCheckIn.getTime() >=
+      24 * 60 * 60 * 1000
+    );
   }, [profileData.lastCheckIn]);
 
   const streakHoursLeft = useMemo(() => {
     if (!profileData.lastCheckIn) return 0;
-    const next = profileData.lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const remaining = next - Date.now();
-    if (remaining <= 0) return 0;
-    return 24 - remaining / (1000 * 60 * 60);
+    const nextCheckIn = profileData.lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
+    const timeRemainingMs = nextCheckIn - new Date().getTime();
+    if (timeRemainingMs <= 0) return 0;
+    return 24 - timeRemainingMs / (1000 * 60 * 60);
   }, [profileData.lastCheckIn]);
 
-  const formatTimeRemaining = (lastCheckIn) => {
-    if (!lastCheckIn) return 'Ready now';
-    const next = lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const remaining = next - Date.now();
-    if (remaining <= 0) return 'Ready now';
+  // --- CORE LOGIC ---
+  const handleCheckIn = useCallback(
+    async () => {
+      if (!db || !userId) return;
 
-    const hours = Math.floor(remaining / (1000 * 60 * 60));
-    const minutes = Math.floor((remaining % (1000 * 60 * 60)) / (1000 * 60));
-    return `${hours}h ${minutes}m`;
-  };
+      const profileRef = doc(db, getUserProfilePath(userId));
+      const now = new Date();
+      const lastCheckIn = profileData.lastCheckIn;
 
-  const handleCheckIn = useCallback(() => {
-    const now = new Date();
-    if (!streakReady) {
-      const text = formatTimeRemaining(profileData.lastCheckIn);
-      showToast(`Next check-in in ${text}`, 'info');
-      return;
-    }
+      const ready =
+        !lastCheckIn ||
+        now.getTime() - lastCheckIn.getTime() >= 24 * 60 * 60 * 1000;
 
-    setProfileData((prev) => {
-      const prevLast = prev.lastCheckIn;
-      let newStreak = prev.streakDays || 0;
-
-      if (!prevLast) {
-        newStreak = 1;
-      } else {
-        const delta = now.getTime() - prevLast.getTime();
-        const within48h = delta < 48 * 60 * 60 * 1000;
-        if (within48h) {
-          newStreak += 1;
-        } else {
-          newStreak = 1;
-          showToast('Streak lost, reset to Day 1.', 'error');
-        }
+      if (!ready) {
+        const timeRemainingMs =
+          lastCheckIn.getTime() + 24 * 60 * 60 * 1000 - now.getTime();
+        const hours = Math.floor(timeRemainingMs / (1000 * 60 * 60));
+        const minutes = Math.floor(
+          (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
+        );
+        return showToast(`Next check-in in ${hours}h ${minutes}m.`, 'info');
       }
 
-      const reward = 50 + newStreak * 5;
-      showToast(`Day ${newStreak} check-in: +${reward} XP`, 'success');
+      try {
+        await runTransaction(db, async (transaction) => {
+          const profileDoc = await transaction.get(profileRef);
+          if (!profileDoc.exists()) throw new Error('Profile does not exist');
 
-      return {
-        ...prev,
-        streakDays: newStreak,
-        xpBalance: prev.xpBalance + reward,
-        lastCheckIn: now,
-      };
-    });
-  }, [profileData.lastCheckIn, streakReady, showToast]);
+          const data = profileDoc.data();
+          let newStreakDays = data.streakDays || 0;
+          let newXp = data.xpBalance || 0;
+          const checkInReward = 50 + newStreakDays * 5;
 
-  // --- PACK OPEN / SYNTHESIS ---
+          const isStreakContinued =
+            !lastCheckIn ||
+            now.getTime() - lastCheckIn.getTime() <
+              48 * 60 * 60 * 1000;
 
-  const getItemCount = useCallback(
-    (id) => {
-      const item = inventory.find((i) => i.id === id);
-      return item ? item.count : 0;
+          if (isStreakContinued) {
+            newStreakDays += 1;
+          } else {
+            newStreakDays = 1;
+            showToast('Streak lost, reset to Day 1.', 'error');
+          }
+
+          newXp += checkInReward;
+
+          transaction.update(profileRef, {
+            streakDays: newStreakDays,
+            xpBalance: newXp,
+            lastCheckIn: Timestamp.now()
+          });
+          showToast(
+            `Day ${newStreakDays} check-in successful! +${checkInReward} XP.`,
+            'success'
+          );
+        });
+      } catch (e) {
+        console.error('Check-in Transaction failed:', e);
+        showToast('Check-in failed. Please try again.', 'error');
+      }
     },
-    [inventory],
-  );
-
-  const setItemCount = useCallback(
-    (id, typeLabel, newCount) => {
-      setInventory((prev) => {
-        const existing = prev.find((i) => i.id === id);
-        if (!existing) {
-          return [...prev, { id, type: typeLabel, count: newCount }];
-        }
-        return prev.map((i) => (i.id === id ? { ...i, count: newCount } : i));
-      });
-    },
-    [],
+    [db, userId, profileData.lastCheckIn, showToast]
   );
 
   const handlePackOpen = useCallback(
-    (packId) => {
-      const pack = inventory.find((i) => i.id === packId);
-      if (!pack || pack.count <= 0) {
-        showToast('No packs available.', 'error');
-        return;
+    async (packId) => {
+      if (!db || !userId)
+        return showToast('Platform is initializing.', 'error');
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          const packRef = doc(db, getUserInventoryPath(userId), packId);
+          const profileRef = doc(db, getUserProfilePath(userId));
+
+          const packDoc = await transaction.get(packRef);
+          const profileDoc = await transaction.get(profileRef);
+
+          if (!packDoc.exists() || packDoc.data().count <= 0) {
+            throw new Error('Pack not found or count is zero.');
+          }
+          if (!profileDoc.exists()) {
+            throw new Error('Profile not found.');
+          }
+
+          const currentPacks = packDoc.data().count;
+          const currentXP = profileDoc.data().xpBalance || 0;
+
+          const dropType = Math.random();
+          let rewardText = '';
+          let xpReward = 0;
+          let itemType = null;
+          let itemAmount = 0;
+
+          if (dropType < 0.05) {
+            itemType = 'Relic';
+            itemAmount = 1;
+            xpReward = 500;
+            rewardText = 'MYTHIC DROP! +1 Relic & 500 XP.';
+          } else if (dropType < 0.25) {
+            itemType = 'Shard';
+            itemAmount = 1;
+            xpReward = 100;
+            rewardText = '+1 Shard & 100 XP.';
+          } else {
+            itemType = 'Fragment';
+            itemAmount = Math.floor(Math.random() * 3) + 1;
+            xpReward = 25;
+            rewardText = `+${itemAmount} Fragments & 25 XP.`;
+          }
+
+          transaction.update(packRef, { count: currentPacks - 1 });
+
+          transaction.update(profileRef, { xpBalance: currentXP + xpReward });
+
+          const itemRef = doc(
+            db,
+            getUserInventoryPath(userId),
+            itemType.toLowerCase()
+          );
+          const itemDoc = await transaction.get(itemRef);
+          const currentItemCount = itemDoc.exists()
+            ? itemDoc.data().count
+            : 0;
+
+          transaction.set(
+            itemRef,
+            {
+              type: itemType,
+              count: currentItemCount + itemAmount,
+              lastAcquired: Timestamp.now()
+            },
+            { merge: true }
+          );
+
+          showToast(rewardText, 'success');
+        });
+      } catch (e) {
+        console.error('Pack Open Transaction failed:', e);
+        showToast(`Open failed: ${e.message}`, 'error');
       }
-
-      const dropType = Math.random();
-      let itemId = 'fragment';
-      let itemType = 'Fragment';
-      let itemAmount = 1;
-      let xpReward = 25;
-      let rewardText = '';
-
-      if (dropType < 0.05) {
-        itemId = 'relic';
-        itemType = 'Relic';
-        itemAmount = 1;
-        xpReward = 500;
-        rewardText = 'MYTHIC DROP! +1 Relic & 500 XP.';
-      } else if (dropType < 0.25) {
-        itemId = 'shard';
-        itemType = 'Shard';
-        itemAmount = 1;
-        xpReward = 120;
-        rewardText = '+1 Shard & 120 XP.';
-      } else {
-        itemId = 'fragment';
-        itemType = 'Fragment';
-        itemAmount = Math.floor(Math.random() * 3) + 1;
-        xpReward = 30;
-        rewardText = `+${itemAmount} Fragments & 30 XP.`;
-      }
-
-      setInventory((prev) =>
-        prev.map((i) => (i.id === packId ? { ...i, count: i.count - 1 } : i)),
-      );
-
-      setItemCount(itemId, itemType, getItemCount(itemId) + itemAmount);
-      setProfileData((prev) => ({ ...prev, xpBalance: prev.xpBalance + xpReward }));
-      showToast(rewardText, 'success');
     },
-    [inventory, getItemCount, setItemCount, showToast],
+    [db, userId, showToast]
   );
 
-  const handleSynthesis = useCallback(() => {
-    const fragments = getItemCount('fragment');
-    if (fragments < 3) {
-      showToast('Need 3 Fragments.', 'error');
-      return;
-    }
-    setItemCount('fragment', 'Fragment', fragments - 3);
-    const shards = getItemCount('shard');
-    setItemCount('shard', 'Shard', shards + 1);
-    showToast('Synthesis: 3 Fragments → 1 Shard.', 'success');
-  }, [getItemCount, setItemCount, showToast]);
+  const handlePostCase = useCallback(
+    async () => {
+      if (!db || !userId)
+        return showToast('Platform is initializing.', 'error');
+      if (!newCaseTitle || !newCaseDesc)
+        return showToast('Title and description are required.', 'error');
 
-  // --- SUPCAST POST ---
+      setIsPostingCase(true);
+      try {
+        const supCastColRef = collection(
+          db,
+          getPublicSupCastCollectionPath()
+        );
 
-  const handlePostCase = useCallback(() => {
-    if (!newCaseTitle || !newCaseDesc) {
-      showToast('Title and description required.', 'error');
-      return;
-    }
-    setIsPostingCase(true);
-    setTimeout(() => {
-      const newCase = {
-        id: Date.now().toString(),
-        title: newCaseTitle,
-        description: newCaseDesc,
-        status: 'Open',
-        posterHandle: '@spawniz',
-        posterId: userId,
-        timestamp: new Date().toISOString(),
-      };
-      setSupCastFeed((prev) => [newCase, ...prev]);
-      setNewCaseTitle('');
-      setNewCaseDesc('');
-      setIsPostingCase(false);
-      showToast('Posted to SupCast mesh.', 'success');
-    }, 400);
-  }, [newCaseTitle, newCaseDesc, userId, showToast]);
+        const newCase = {
+          title: newCaseTitle,
+          description: newCaseDesc,
+          status: 'Open',
+          posterId: userId,
+          expertId: null,
+          timestamp: Timestamp.now(),
+          posterHandle: '@spawniz'
+        };
 
-  // --- NAV & SHEETS ---
+        await addDoc(supCastColRef, newCase);
 
-  const NavItem = ({ icon: Icon, tabName, label }) => (
-    <button
-      onClick={() => setCurrentTab(tabName)}
-      className={`flex flex-col items-center px-2 py-1.5 rounded-lg transition duration-150 ${
-        currentTab === tabName ? `${neon}` : 'text-slate-500 hover:text-slate-100'
-      }`}
-    >
-      <Icon className="w-5 h-5" />
-      <span className="text-[10px] mt-0.5">{label}</span>
-    </button>
-  );
-
-  const Sheet = ({ id, title, children }) => (
-    <div
-      className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-md h-[88vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duration-300 ease-out z-50 overflow-y-auto px-3 pt-2 pb-4 ${
-        activeSheet === id ? 'translate-y-0' : 'translate-y-full'
-      }`}
-    >
-      <div className="w-full flex justify-center py-1 cursor-pointer" onClick={() => setActiveSheet(null)}>
-        <div className="h-1 w-10 bg-slate-600 rounded-full" />
-      </div>
-      <div className="pt-2">
-        <h2 className={`text-lg font-bold mb-3 ${neon}`}>{title}</h2>
-        {children}
-      </div>
-    </div>
-  );
-
-  const SheetAccount = () => (
-    <Sheet id="account" title="Account & Rewards">
-      <div className={`${cardBg} ${borderColor} border p-3 rounded-xl flex items-center space-x-3 mb-4`}>
-        <User className={`w-7 h-7 ${neon}`} />
-        <div className="text-xs">
-          <p className="font-semibold text-slate-50">@spawniz</p>
-          <p className="text-slate-400">
-            Mesh ID: {userId ? `${userId.slice(0, 6)}...${userId.slice(-4)}` : 'Loading...'}
-          </p>
-          <p className="text-[10px] text-slate-500 mt-1">
-            Full ID: <span className="font-mono">{userId}</span>
-          </p>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 gap-3 mb-4 text-xs">
-        <div className={`${cardBg} ${borderColor} border p-3 rounded-xl`}>
-          <p className="text-[11px] text-slate-400">Total XP</p>
-          <p className={`text-xl font-bold ${neon}`}>{profileData.xpBalance.toLocaleString()}</p>
-        </div>
-        <div className={`${cardBg} ${borderColor} border p-3 rounded-xl`}>
-          <p className="text-[11px] text-slate-400">SPN Balance</p>
-          <p className={`text-xl font-bold ${accentBlue}`}>{profileData.spawnTokenBalance.toFixed(2)}</p>
-        </div>
-      </div>
-
-      <div className={`${cardBg} ${borderColor} border p-3 rounded-xl space-y-2 text-xs`}>
-        <h3 className={`${accentBlue} font-semibold text-sm`}>Referral Mesh</h3>
-        <p className="text-slate-400 text-[11px]">
-          Share your referral key to earn XP and mesh rewards across Base.
-        </p>
-        <div className="flex justify-between items-center bg-slate-900 px-2 py-2 rounded-lg border border-slate-700">
-          <span className={`font-mono ${neon} text-[11px]`}>SPAWN-MESH-74F</span>
-          <button
-            onClick={() => {
-              navigator.clipboard.writeText('SPAWN-MESH-74F');
-              showToast('Referral code copied.', 'success');
-            }}
-            className={`text-[10px] px-2 py-1 rounded-full font-semibold ${neonBg}/20 ${neon} border border-[#00FFC0]/60`}
-          >
-            Copy
-          </button>
-        </div>
-      </div>
-
-      <button className="w-full mt-5 py-2.5 bg-red-700/60 rounded-xl font-semibold border border-red-800 text-xs text-slate-50 flex items-center justify-center hover:bg-red-700/80">
-        <LogOut className="w-4 h-4 mr-1" /> Switch wallet / Logout
-      </button>
-    </Sheet>
-  );
-
-  const SheetSettings = () => (
-    <Sheet id="settings" title="Settings & Mesh API">
-      <div className="space-y-3 text-xs">
-        <div className={`${cardBg} ${borderColor} border p-3 rounded-xl space-y-1.5`}>
-          <h3 className={`${accentBlue} font-semibold text-sm`}>XP SDK & Integration</h3>
-          <p className="text-slate-400 text-[11px]">
-            Connect SpawnEngine XP to your own Base apps, frames, or bots.
-          </p>
-          <button className={`w-full py-2 ${neonBg}/20 rounded-xl font-semibold ${neon} border border-[#00FFC0]/60`}>
-            Show API key
-          </button>
-        </div>
-
-        <div className={`${cardBg} ${borderColor} border p-3 rounded-xl space-y-1.5`}>
-          <h3 className={`${accentBlue} font-semibold text-sm`}>Premium Mesh Filters</h3>
-          <p className="text-slate-400 text-[11px]">
-            Alpha wallets, creator clusters, and whale tracking. Requires SPN staking.
-          </p>
-          <button className="w-full py-2 bg-slate-800 rounded-xl font-semibold text-slate-400 border border-slate-700 cursor-not-allowed">
-            Upgrade (soon)
-          </button>
-        </div>
-
-        <div className={`${cardBg} ${borderColor} border p-3 rounded-xl space-y-1.5`}>
-          <h3 className={`${accentBlue} font-semibold text-sm`}>Launchpad Builder</h3>
-          <p className="text-slate-400 text-[11px]">
-            Future zero-code deploy for tokens, packs, quests and automations.
-          </p>
-          <button className="w-full py-2 bg-blue-600/20 rounded-xl font-semibold text-[#22A8FF] border border-blue-600/60">
-            Open Creator Panel
-          </button>
-        </div>
-
-        <button className="w-full py-2.5 mt-3 bg-slate-900 rounded-xl font-semibold border border-slate-700 text-slate-300">
-          Manage notifications
-        </button>
-      </div>
-    </Sheet>
+        setNewCaseTitle('');
+        setNewCaseDesc('');
+        showToast('Question posted to SupCast network!', 'success');
+      } catch (e) {
+        console.error('Post Case failed:', e);
+        showToast('Failed to post case. Check network.', 'error');
+      } finally {
+        setIsPostingCase(false);
+      }
+    },
+    [db, userId, newCaseTitle, newCaseDesc, showToast]
   );
 
   // --- TABS ---
@@ -444,278 +462,571 @@ const App = () => {
     const timeRemainingText = formatTimeRemaining(profileData.lastCheckIn);
     const progressPercent = Math.min(100, (streakHoursLeft / 24) * 100);
 
+    // Mock Mesh & Gas data (no external API yet)
+    const meshOverview = [
+      {
+        label: 'Active wallets',
+        value: '4',
+        sub: 'Mesh linked'
+      },
+      {
+        label: 'Creator tokens',
+        value: '12',
+        sub: 'Tracked'
+      },
+      {
+        label: 'Packs opened',
+        value: '31',
+        sub: 'Last 7 days'
+      },
+      {
+        label: 'SupCast cases',
+        value: supCastFeed.length.toString(),
+        sub: 'Open'
+      }
+    ];
+
+    const gasInfo = {
+      base: {
+        low: '0.05',
+        avg: '0.09',
+        high: '0.14'
+      },
+      pnl: {
+        profit30d: '+1.24 ETH',
+        fees30d: '0.31 ETH',
+        hitRate: '62%'
+      }
+    };
+
     const oracleFeed = [
       {
         type: 'alpha',
-        message: "Whale 0xab...c78 opened 3 creator packs in a row. Mesh entropy spike.",
-        icon: <ShieldCheck className="w-3.5 h-3.5 text-[#00FFC0]" />,
+        message:
+          "Alpha signal: wallet '0xab...c78' increased pack volume by 220%.",
+        icon: <ShieldCheck className="w-3.5 h-3.5 text-[#00FFC0]" />
       },
       {
         type: 'gravity',
-        message: 'Creator cluster “Y” has +220% XP flow in the last 24h on Base.',
-        icon: <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />,
+        message:
+          'Gravity cluster: Creator mesh Y is pulling new liquidity on Base.',
+        icon: <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
       },
       {
         type: 'burn',
-        message: 'High-volume wallet 0xde...f12 burned 40% of a meme-token supply.',
-        icon: <Flame className="w-3.5 h-3.5 text-red-500" />,
+        message:
+          "Burn window: high-volume wallet '0xde...f12' reduced supply by 18%.",
+        icon: <Flame className="w-3.5 h-3.5 text-red-500" />
       },
       {
         type: 'quest',
-        message: 'IRL Quest: Base builders meetup – bonus streak XP if checked in.',
-        icon: <MapPin className="w-3.5 h-3.5 text-blue-400" />,
-      },
+        message:
+          'Quest: Complete 1 SupCast solution and 1 pack open in 24h for a bonus.',
+        icon: <MapPin className="w-3.5 h-3.5 text-blue-400" />
+      }
     ];
 
     return (
       <div className="space-y-4">
-        {/* XP / SPN */}
-        <div className="grid grid-cols-2 gap-3 text-xs">
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl text-center shadow-sm hover:scale-[1.01] transition-transform`}
-          >
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide">XP</p>
-            <p className={`text-3xl font-extrabold mt-1 ${neon}`}>{profileData.xpBalance.toLocaleString()}</p>
+        {/* Mesh Overview row */}
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-lg`}
+        >
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <Hexagon className="w-4 h-4 text-[#00FFC0]" />
+              <h2 className="text-xs font-semibold tracking-wide text-gray-300 uppercase">
+                Mesh overview
+              </h2>
+            </div>
+            <span className="text-[10px] font-mono text-gray-500">
+              Phase 1 · HUD v0.2
+            </span>
           </div>
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl text-center shadow-sm hover:scale-[1.01] transition-transform`}
-          >
-            <p className="text-[10px] text-slate-400 uppercase tracking-wide">SPN</p>
-            <p className={`text-3xl font-extrabold mt-1 ${accentBlue}`}>
-              {profileData.spawnTokenBalance.toFixed(2)}
-            </p>
-          </div>
-        </div>
-
-        {/* Streak */}
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl space-y-2 text-xs`}>
-          <div className="flex justify-between items-center">
-            <h3 className="text-sm font-bold text-slate-50">Daily streak · {profileData.streakDays} days</h3>
-            <button
-              onClick={handleCheckIn}
-              disabled={!streakReady}
-              className={`px-3 py-1.5 rounded-full font-semibold text-[11px] border ${
-                streakReady
-                  ? `${neonBg}/20 ${neon} border-[#00FFC0]`
-                  : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-              }`}
-            >
-              {streakReady ? 'Check in' : 'Pending'}
-            </button>
-          </div>
-          <p className="text-[11px] text-slate-400">
-            Next check-in in: <span className="font-mono text-slate-100">{timeRemainingText}</span>
-          </p>
-          <div className="w-full bg-slate-900 rounded-full h-1.5">
-            <div
-              className={`h-1.5 rounded-full ${neonBg} transition-all duration-700`}
-              style={{ width: `${progressPercent}%` }}
-            />
-          </div>
-          <button className="w-full text-[10px] text-left text-red-400/80 hover:text-red-300 pt-0.5">
-            <ShieldCheck className="w-3 h-3 inline-block mr-1" />
-            Activate streak insurance (soon)
-          </button>
-        </div>
-
-        {/* Oracle feed */}
-        <div className="space-y-2 text-xs">
-          <h3 className={`text-sm font-bold ${accentBlue}`}>Mesh signals</h3>
-          <div className="space-y-1.5">
-            {oracleFeed.map((item, idx) => (
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+            {meshOverview.map((item, idx) => (
               <div
                 key={idx}
-                className="flex items-start space-x-2.5 px-3 py-2 bg-slate-900 rounded-xl border border-slate-800"
+                className="px-2.5 py-2 rounded-xl bg-[#171722] border border-[#26263A] flex flex-col gap-0.5"
               >
-                <div className="flex-shrink-0 mt-0.5">{item.icon}</div>
-                <span className="text-[11px] text-slate-200">{item.message}</span>
+                <span className="text-[10px] text-gray-400 uppercase tracking-wide">
+                  {item.label}
+                </span>
+                <span
+                  className={`text-lg font-bold leading-none ${neon}`}
+                >
+                  {item.value}
+                </span>
+                <span className="text-[10px] text-gray-500">
+                  {item.sub}
+                </span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
+
+        {/* XP / SPN stats */}
+        <section className="grid grid-cols-2 gap-2">
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center shadow-md transition hover:scale-[1.01] ${neonShadow}`}
+          >
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+              Mesh XP
+            </p>
+            <p
+              className={`text-2xl sm:text-3xl font-extrabold mt-1 ${neon}`}
+            >
+              {profileData.xpBalance.toLocaleString()}
+            </p>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Used across quests & packs
+            </p>
+          </div>
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center shadow-md transition hover:scale-[1.01]`}
+          >
+            <p className="text-[10px] text-gray-400 uppercase tracking-wider">
+              SPN balance
+            </p>
+            <p
+              className={`text-2xl sm:text-3xl font-extrabold mt-1 ${accentBlue}`}
+            >
+              {profileData.spawnTokenBalance.toFixed(2)}
+            </p>
+            <p className="text-[10px] text-gray-500 mt-1">
+              Future onchain rewards
+            </p>
+          </div>
+        </section>
+
+        {/* Daily streak */}
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+        >
+          <div className="flex justify-between items-center">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-gray-400 uppercase tracking-wide">
+                Daily streak
+              </span>
+              <span className="text-sm font-semibold text-white">
+                {profileData.streakDays} days active
+              </span>
+            </div>
+            <button
+              onClick={handleCheckIn}
+              disabled={!streakReady}
+              className={`px-3 py-1.5 rounded-full font-semibold text-[11px] border transition ${
+                streakReady
+                  ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/30`
+                  : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+              }`}
+            >
+              {streakReady ? 'Check in now' : 'Check in'}
+            </button>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            Next check-in:{' '}
+            <span className="font-mono text-gray-200">
+              {timeRemainingText}
+            </span>
+          </p>
+          <div className="w-full bg-gray-900 rounded-full h-1.5">
+            <div
+              className={`h-1.5 rounded-full ${neonBg} transition-all duration-1000`}
+              style={{ width: `${progressPercent}%` }}
+            ></div>
+          </div>
+          <button className="w-full text-[11px] text-center text-red-400/80 hover:text-red-300 pt-1 flex items-center justify-center gap-1">
+            <ShieldCheck className="w-3 h-3" />
+            <span>Preview streak insurance module</span>
+          </button>
+        </section>
+
+        {/* Gas & earnings (compact) */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl shadow-md`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <Activity className="w-3.5 h-3.5 text-[#00FFC0]" />
+                <span className="text-[11px] text-gray-300 font-semibold uppercase tracking-wide">
+                  Base gas
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-500 font-mono">
+                Live mock
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <div className="space-y-0.5">
+                <p className="text-gray-400">Low</p>
+                <p className="font-mono text-green-400">
+                  {gasInfo.base.low} gwei
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-gray-400">Average</p>
+                <p className="font-mono text-yellow-300">
+                  {gasInfo.base.avg} gwei
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-gray-400">High</p>
+                <p className="font-mono text-red-400">
+                  {gasInfo.base.high} gwei
+                </p>
+              </div>
+            </div>
+          </div>
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl shadow-md`}
+          >
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <DollarSign className="w-3.5 h-3.5 text-[#00A6FF]" />
+                <span className="text-[11px] text-gray-300 font-semibold uppercase tracking-wide">
+                  30d mesh earnings
+                </span>
+              </div>
+              <span className="text-[10px] text-gray-500 font-mono">
+                Simulation
+              </span>
+            </div>
+            <div className="flex justify-between text-[11px]">
+              <div className="space-y-0.5">
+                <p className="text-gray-400">Profit</p>
+                <p className="font-mono text-green-400">
+                  {gasInfo.pnl.profit30d}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-gray-400">Fees</p>
+                <p className="font-mono text-red-300">
+                  {gasInfo.pnl.fees30d}
+                </p>
+              </div>
+              <div className="space-y-0.5">
+                <p className="text-gray-400">Hit rate</p>
+                <p className="font-mono text-[#00FFC0]">
+                  {gasInfo.pnl.hitRate}
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Oracle feed */}
+        <section className="space-y-2">
+          <div className="flex items-center justify-between">
+            <h3
+              className={`text-xs font-semibold tracking-wide uppercase ${accentBlue}`}
+            >
+              Oracle feed
+            </h3>
+            <span className="text-[10px] text-gray-500">
+              Phase 1 · Signals only
+            </span>
+          </div>
+          <div className="space-y-1.5">
+            {oracleFeed.map((item, index) => (
+              <div
+                key={index}
+                className="flex items-start gap-2 px-3 py-2 bg-[#101018] rounded-xl border border-[#252535] shadow-sm"
+              >
+                <div className="mt-0.5 flex-shrink-0">{item.icon}</div>
+                <span className="text-[11px] text-gray-200 leading-snug">
+                  {item.message}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
       </div>
     );
   };
 
   const LootTab = () => {
+    const getItemCount = (type) => {
+      const item = inventory.find((i) => i.id === type.toLowerCase());
+      return item ? item.count : 0;
+    };
+
     const starterPack =
       inventory.find((i) => i.id === 'startermeshpack') || {
         id: 'startermeshpack',
-        type: 'Starter Mesh Pack',
-        count: 0,
+        count: 1,
+        type: 'Starter Mesh Pack'
       };
-    const fragments = getItemCount('fragment');
-    const shards = getItemCount('shard');
-    const relics = getItemCount('relic');
+    const fragments = getItemCount('Fragment');
+    const shards = getItemCount('Shard');
+    const relics = getItemCount('Relic');
+
+    const handleSynthesis = async () => {
+      if (!db || !userId) return;
+      if (fragments < 3)
+        return showToast('Not enough Fragments (3 needed).', 'error');
+
+      try {
+        await runTransaction(db, async (transaction) => {
+          const fragRef = doc(
+            db,
+            getUserInventoryPath(userId),
+            'fragment'
+          );
+          const shardRef = doc(
+            db,
+            getUserInventoryPath(userId),
+            'shard'
+          );
+
+          transaction.update(fragRef, { count: fragments - 3 });
+
+          const shardDoc = await transaction.get(shardRef);
+          const currentShardCount = shardDoc.exists()
+            ? shardDoc.data().count
+            : 0;
+
+          transaction.set(
+            shardRef,
+            {
+              type: 'Shard',
+              count: currentShardCount + 1,
+              lastAcquired: Timestamp.now()
+            },
+            { merge: true }
+          );
+
+          showToast('Synthesis successful! 3 Fragments → 1 Shard.', 'success');
+        });
+      } catch (e) {
+        console.error('Synthesis failed:', e);
+        showToast('Synthesis failed. Please try again.', 'error');
+      }
+    };
 
     return (
-      <div className="space-y-4 text-xs">
-        <div className="flex justify-between bg-slate-900 px-1.5 py-1 rounded-xl border border-slate-800">
-          <button className="flex-1 py-1.5 rounded-lg text-[11px] font-semibold bg-slate-800 text-slate-100">
+      <div className="space-y-4">
+        <div className="flex justify-around bg-[#101018] px-1 py-1 rounded-2xl border border-[#26263A] shadow-inner text-[11px]">
+          <button
+            className={`w-1/3 py-1.5 rounded-lg ${neonBg}/10 ${neon} font-semibold`}
+          >
             Packs
           </button>
-          <button className="flex-1 py-1.5 rounded-lg text-[11px] text-slate-400 hover:bg-slate-800">
-            Pull Lab
+          <button className="w-1/3 py-1.5 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
+            Pull lab
           </button>
-          <button className="flex-1 py-1.5 rounded-lg text-[11px] text-slate-400 hover:bg-slate-800">
+          <button className="w-1/3 py-1.5 rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">
             Inventory
           </button>
         </div>
 
-        {/* Pack */}
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl space-y-2`}>
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+        >
           <div className="flex justify-between items-start">
             <div>
-              <h3 className="text-sm font-bold text-slate-50">Starter Mesh Pack</h3>
-              <p className="text-[11px] text-slate-400">
-                Base pack with guaranteed Fragments and a chance for Shards / Relics.
+              <h3 className="text-sm font-semibold text-white">
+                Starter mesh pack
+              </h3>
+              <p className="text-[11px] text-gray-400">
+                Base pack with guaranteed Fragments and a chance for Shards.
               </p>
             </div>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
+            <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-200 border border-gray-700">
               ID: S001
             </span>
           </div>
-          <div className="flex justify-between items-center pt-1 border-t border-slate-800 mt-1">
-            <span className={`text-2xl font-extrabold ${neon}`}>{starterPack.count}x</span>
+          <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+            <span className={`text-xl font-extrabold ${neon}`}>
+              {starterPack.count} left
+            </span>
             <button
               onClick={() => handlePackOpen(starterPack.id)}
               disabled={starterPack.count <= 0}
-              className={`px-3 py-1.5 rounded-lg font-bold text-[11px] border ${
+              className={`px-3 py-1.5 rounded-lg font-semibold text-[11px] border transition ${
                 starterPack.count > 0
-                  ? `${neonBg}/20 ${neon} border-[#00FFC0]`
-                  : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                  ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/40`
+                  : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
               }`}
             >
-              Open pack
+              Simulate open
             </button>
           </div>
-        </div>
+        </section>
 
-        {/* Pull Lab */}
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl space-y-3`}>
-          <h3 className={`text-sm font-bold ${accentBlue}`}>Pull Lab · Synthesis</h3>
-          <p className="text-[11px] text-slate-400">
-            Test your luck. Convert low-tier fragments into higher-tier items.
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-3 shadow-md`}
+        >
+          <div className="flex items-center justify-between">
+            <h3 className={`text-sm font-semibold ${accentBlue}`}>
+              Pull lab · synthesis
+            </h3>
+            <span className="text-[10px] text-gray-500">
+              3 Fragments → 1 Shard
+            </span>
+          </div>
+          <p className="text-[11px] text-gray-400">
+            Combine lower-tier fragments into shards. Relics remain mythic and
+            non-burnable.
           </p>
 
-          <div className="grid grid-cols-3 text-center text-xs border-t border-slate-800 pt-2">
-            <div className="p-2 border-r border-slate-800">
-              <p className="text-2xl font-bold text-slate-50">{fragments}</p>
-              <p className="text-[10px] text-slate-400">Fragments</p>
+          <div className="grid grid-cols-3 text-center text-xs pt-2 border-t border-gray-800/50">
+            <div className="p-2 border-r border-gray-800">
+              <p className="text-xl font-bold text-white">{fragments}</p>
+              <p className="text-[10px] text-gray-400">Fragments</p>
             </div>
-            <div className="p-2 border-r border-slate-800">
-              <p className="text-2xl font-bold text-[#22A8FF]">{shards}</p>
-              <p className="text-[10px] text-slate-400">Shards</p>
+            <div className="p-2 border-r border-gray-800">
+              <p className={`text-xl font-bold ${accentBlue}`}>{shards}</p>
+              <p className="text-[10px] text-gray-400">Shards</p>
             </div>
             <div className="p-2">
-              <p className="text-2xl font-bold text-red-400">{relics}</p>
-              <p className="text-[10px] text-slate-400">Relics</p>
+              <p className="text-xl font-bold text-red-400">{relics}</p>
+              <p className="text-[10px] text-gray-400">Relics</p>
             </div>
           </div>
 
           <button
             onClick={handleSynthesis}
             disabled={fragments < 3}
-            className={`w-full px-3 py-2 rounded-lg font-semibold text-[11px] border ${
+            className={`w-full px-3 py-1.75 rounded-lg font-semibold text-[11px] border transition ${
               fragments >= 3
-                ? 'bg-blue-600/20 text-[#22A8FF] border-blue-600 hover:bg-blue-600/40'
-                : 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
+                ? 'bg-blue-600/20 text-blue-300 border-blue-600 hover:bg-blue-600/40'
+                : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
             }`}
           >
-            Run synthesis · 3 Fragments → 1 Shard
+            Run synthesis
           </button>
-        </div>
+        </section>
       </div>
     );
   };
 
   const QuestsTab = () => {
     const quests = [
-      { type: 'Daily', title: 'Daily check-in', reward: 10, status: 'Completed' },
-      { type: 'Daily', title: 'Open 1 pack', reward: 25, status: 'Claimable' },
-      { type: 'Weekly', title: '5 day streak', reward: 150, status: 'Locked' },
-      { type: 'Weekly', title: 'Solve 1 SupCast case', reward: 100, status: 'Claimable' },
-      { type: 'IRL', title: 'Base meetup (Stockholm)', reward: 200, status: 'Locked' },
+      {
+        type: 'Daily',
+        title: 'Daily check-in (completed)',
+        reward: 10,
+        status: 'Completed'
+      },
+      {
+        type: 'Daily',
+        title: 'Open 1 pack',
+        reward: 25,
+        status: 'Claimable'
+      },
+      {
+        type: 'Weekly',
+        title: '5 day streak run',
+        reward: 150,
+        status: 'Locked'
+      },
+      {
+        type: 'Weekly',
+        title: 'Solve 1 SupCast case',
+        reward: 100,
+        status: 'Claimable'
+      },
+      {
+        type: 'IRL',
+        title: 'Base builders meetup (Stockholm)',
+        reward: 200,
+        status: 'Locked'
+      }
     ];
 
-    const handleClaim = (title) => {
-      showToast(`Reward for "${title}" claimed. XP added.`, 'success');
-      // could update quest state if we track it
+    const handleClaim = (questTitle) => {
+      showToast(`Reward for "${questTitle}" claimed! XP added.`, 'success');
     };
 
     const getStatusStyle = (status) => {
       switch (status) {
         case 'Claimable':
-          return 'bg-[#00FFC0]/20 text-[#00FFC0] border-[#00FFC0]';
+          return 'bg-[#00FFC0]/15 text-[#00FFC0] border-[#00FFC0]';
         case 'Completed':
-          return 'bg-green-600/30 text-green-300 border-green-600';
+          return 'bg-green-600/25 text-green-300 border-green-600';
         case 'Locked':
         default:
-          return 'bg-slate-800 text-slate-500 border-slate-700';
+          return 'bg-gray-800 text-gray-500 border-gray-700';
       }
     };
 
     return (
-      <div className="space-y-4 text-xs">
-        <h2 className={`text-sm font-extrabold ${neon}`}>Quests & routines</h2>
+      <div className="space-y-4">
+        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
+          Quest matrix
+        </h2>
 
-        <div className="space-y-2">
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Daily</h3>
+        <section className="space-y-2">
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Daily goals
+          </h3>
           {quests
             .filter((q) => q.type === 'Daily')
-            .map((q, idx) => (
+            .map((quest, index) => (
               <div
-                key={idx}
-                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-xl flex justify-between items-center`}
+                key={index}
+                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
               >
-                <div>
-                  <p className="text-xs font-semibold text-slate-50">{q.title}</p>
-                  <p className="text-[11px] text-slate-400 flex items-center mt-0.5">
-                    <Star className="w-3 h-3 mr-1 text-yellow-400" />
-                    {q.reward} XP
+                <div className="space-y-0.5">
+                  <p className="text-[12px] font-semibold text-white">
+                    {quest.title}
+                  </p>
+                  <p className="text-[11px] text-gray-400 flex items-center">
+                    <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
+                    {quest.reward} XP
                   </p>
                 </div>
                 <button
-                  onClick={() => q.status === 'Claimable' && handleClaim(q.title)}
-                  disabled={q.status !== 'Claimable'}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${getStatusStyle(
-                    q.status,
-                  )} ${q.status !== 'Claimable' && 'cursor-not-allowed'}`}
+                  onClick={() =>
+                    quest.status === 'Claimable' && handleClaim(quest.title)
+                  }
+                  disabled={quest.status !== 'Claimable'}
+                  className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
+                    quest.status
+                  )}`}
                 >
-                  {q.status}
+                  {quest.status}
                 </button>
               </div>
             ))}
-        </div>
+        </section>
 
-        <div className="space-y-2">
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Weekly & IRL</h3>
+        <section className="space-y-2">
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Weekly / IRL
+          </h3>
           {quests
             .filter((q) => q.type !== 'Daily')
-            .map((q, idx) => (
+            .map((quest, index) => (
               <div
-                key={idx}
-                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-xl flex justify-between items-center`}
+                key={index}
+                className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
               >
-                <div>
-                  <p className="text-xs font-semibold text-slate-50">{q.title}</p>
-                  <p className="text-[11px] text-slate-400 flex items-center mt-0.5">
-                    <Gift className="w-3 h-3 mr-1 text-pink-400" />
-                    {q.reward} XP
+                <div className="space-y-0.5">
+                  <p className="text-[12px] font-semibold text-white">
+                    {quest.title}
+                  </p>
+                  <p className="text-[11px] text-gray-400 flex items-center">
+                    <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
+                    {quest.reward} XP
                   </p>
                 </div>
                 <button
-                  onClick={() => q.status === 'Claimable' && handleClaim(q.title)}
-                  disabled={q.status !== 'Claimable'}
-                  className={`px-2.5 py-1 rounded-full text-[10px] font-semibold border ${getStatusStyle(
-                    q.status,
-                  )} ${q.status !== 'Claimable' && 'cursor-not-allowed'}`}
+                  onClick={() =>
+                    quest.status === 'Claimable' && handleClaim(quest.title)
+                  }
+                  disabled={quest.status !== 'Claimable'}
+                  className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
+                    quest.status
+                  )}`}
                 >
-                  {q.status}
+                  {quest.status}
                 </button>
               </div>
             ))}
-        </div>
+        </section>
       </div>
     );
   };
@@ -724,22 +1035,25 @@ const App = () => {
     const modes = [
       {
         id: 'alpha',
-        name: 'Alpha wallets',
-        desc: 'Wallets with heavy creator-pack and token activity on Base.',
-        icon: ShieldCheck,
+        name: 'Alpha hunters',
+        desc:
+          'Track wallets with aggressive pack / creator token activity across Base.',
+        icon: ShieldCheck
       },
       {
         id: 'new',
         name: 'New creators',
-        desc: 'Fresh deploys: tokens, packs and quests entering the mesh.',
-        icon: Zap,
+        desc:
+          'Surface tokens and packs launched via zero-code builders & miniapps.',
+        icon: Zap
       },
       {
         id: 'gravity',
         name: 'Gravity clusters',
-        desc: 'Wallet clusters with the highest XP and liquidity flow.',
-        icon: Globe,
-      },
+        desc:
+          'Visualize clusters of wallets with the highest XP flow and SPN exposure.',
+        icon: Globe
+      }
     ];
 
     const [activeMode, setActiveMode] = useState(modes[0]);
@@ -748,59 +1062,76 @@ const App = () => {
       { color: neon, name: 'XP streams', icon: Activity },
       { color: accentBlue, name: 'Pack pulls', icon: Box },
       { color: 'text-red-500', name: 'Burn events', icon: Flame },
-      { color: 'text-yellow-400', name: 'Creator flows', icon: DollarSign },
+      { color: 'text-yellow-400', name: 'Creator flows', icon: DollarSign }
     ];
 
     return (
-      <div className="space-y-4 text-xs">
-        <h2 className={`text-sm font-extrabold ${neon}`}>Mesh explorer</h2>
+      <div className="space-y-4">
+        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
+          Mesh explorer
+        </h2>
 
-        <div className="space-y-2">
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Modes</h3>
-          <div className="grid grid-cols-3 gap-2">
+        <section className="space-y-3">
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Mesh modes
+          </h3>
+          <div className="grid grid-cols-3 gap-1.5">
             {modes.map((mode) => (
               <button
                 key={mode.id}
                 onClick={() => setActiveMode(mode)}
-                className={`p-2.5 rounded-xl border text-center text-[11px] shadow-sm ${
+                className={`px-2 py-2 rounded-xl border text-[11px] shadow-sm transition ${
                   activeMode.id === mode.id
                     ? `border-[#00FFC0] ${neonBg}/10`
-                    : `${borderColor} bg-slate-900 hover:border-slate-500`
+                    : `${borderColor} bg-[#101018] hover:border-gray-500`
                 }`}
               >
                 <mode.icon
                   className={`w-4 h-4 mx-auto mb-1 ${
-                    activeMode.id === mode.id ? neon : 'text-slate-400'
+                    activeMode.id === mode.id ? neon : 'text-gray-400'
                   }`}
                 />
-                <span className="font-semibold text-slate-50">{mode.name}</span>
+                <span className="font-semibold text-white">
+                  {mode.name}
+                </span>
               </button>
             ))}
           </div>
-          <div className="text-[11px] text-slate-400 px-3 py-2 border-l-4 border-[#00FFC0]/60 bg-slate-900/70 rounded-r-xl">
-            <span className="font-semibold text-slate-100 mr-1">{activeMode.name}:</span>
+          <div className="text-[11px] text-gray-400 px-3 py-2 border-l-4 border-[#00FFC0]/60 bg-[#101018]/80 rounded-r-xl">
+            <span className="font-semibold text-white mr-1">
+              {activeMode.name}:
+            </span>
             {activeMode.desc}
           </div>
-        </div>
+        </section>
 
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl space-y-2`}>
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Legend</h3>
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Legend · flows
+          </h3>
           <div className="grid grid-cols-2 gap-2 text-[11px]">
-            {legendItems.map((item, idx) => (
-              <div key={idx} className="flex items-center space-x-2">
+            {legendItems.map((item, index) => (
+              <div
+                key={index}
+                className="flex items-center gap-2 text-gray-300"
+              >
                 <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
-                <span className="text-slate-300">{item.name}</span>
+                <span>{item.name}</span>
               </div>
             ))}
           </div>
-        </div>
+        </section>
 
-        <div className="h-40 w-full bg-slate-900/60 rounded-xl border border-slate-800 flex items-center justify-center text-[11px] text-slate-500 italic">
-          3D mesh / Bubble map placeholder · “Nansen for creators” comes here
-        </div>
+        <section className="h-40 w-full bg-[#101018] rounded-2xl border border-[#26263A] flex items-center justify-center shadow-inner">
+          <p className="text-[11px] text-gray-500 italic">
+            3D WebGL mesh simulation placeholder · Phase 5
+          </p>
+        </section>
 
-        <button className="w-full py-2.5 bg-blue-600/20 rounded-xl font-semibold text-[11px] text-[#22A8FF] border border-blue-600 hover:bg-blue-600/40">
-          Open full Mesh explorer (v2)
+        <button className="w-full py-2.5 bg-blue-600/20 rounded-2xl font-semibold text-[11px] text-blue-300 border border-blue-600 hover:bg-blue-600/40 transition shadow-md">
+          Open full mesh explorer (future)
         </button>
       </div>
     );
@@ -810,353 +1141,293 @@ const App = () => {
     const userProfile = { solved: 7, xp: 350, rating: 4.5 };
 
     return (
-      <div className="space-y-4 text-xs">
-        <h2 className={`text-sm font-extrabold ${neon}`}>SupCast · Support Mesh</h2>
+      <div className="space-y-4">
+        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
+          SupCast network
+        </h2>
 
-        {/* Ask form */}
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl space-y-2`}>
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Post a question</h3>
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Post a question
+          </h3>
           <input
             type="text"
-            placeholder="Short title"
+            placeholder="Short title of the problem"
             value={newCaseTitle}
             onChange={(e) => setNewCaseTitle(e.target.value)}
-            className="w-full px-2.5 py-2 bg-slate-900 rounded-lg border border-slate-700 text-[11px] text-slate-100 focus:outline-none focus:border-[#00FFC0]"
+            className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 text-[12px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
           />
           <textarea
-            placeholder="Describe the issue (wallet, chain, error...)"
+            placeholder="Describe your problem (wallet, chain, error code...)"
             value={newCaseDesc}
             onChange={(e) => setNewCaseDesc(e.target.value)}
-            className="w-full px-2.5 py-2 bg-slate-900 rounded-lg border border-slate-700 text-[11px] text-slate-100 h-16 resize-none focus:outline-none focus:border-[#00FFC0]"
+            className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 h-20 text-[12px] text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
           />
           <button
             onClick={handlePostCase}
             disabled={!newCaseTitle || !newCaseDesc || isPostingCase}
-            className={`w-full py-2.5 rounded-lg font-semibold text-[11px] border ${
+            className={`w-full py-2.25 rounded-lg font-semibold text-[11px] border transition ${
               !newCaseTitle || !newCaseDesc || isPostingCase
-                ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed'
-                : 'bg-red-600/50 border-red-700 text-red-100 hover:bg-red-600/70'
+                ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                : 'bg-red-600/30 border-red-700 text-red-300 hover:bg-red-600/50'
             }`}
           >
-            {isPostingCase ? 'Posting...' : 'Post to SupCast network'}
+            {isPostingCase ? 'Posting...' : 'Post to SupCast mesh'}
           </button>
-        </div>
+        </section>
 
-        {/* Feed */}
-        <div className="space-y-2">
-          <h3 className={`text-xs font-bold ${accentBlue}`}>Open cases ({supCastFeed.length})</h3>
+        <section className="space-y-2">
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Open questions ({supCastFeed.length})
+          </h3>
           {supCastFeed.length === 0 ? (
-            <div className="px-3 py-3 bg-slate-900/60 text-[11px] text-slate-500 rounded-xl border border-slate-800 text-center">
-              No open cases yet. Be first.
+            <div className="px-3 py-3 bg-[#101018] text-[11px] text-gray-500 rounded-2xl border border-gray-800 text-center">
+              No open cases yet. Be the first to ask.
             </div>
           ) : (
             supCastFeed.map((item) => (
               <div
                 key={item.id}
-                className="px-3 py-2.5 bg-slate-900 rounded-xl border border-slate-800 flex justify-between items-start"
+                className="px-3 py-2.5 bg-[#101018] rounded-2xl border border-gray-800 flex justify-between items-start shadow-sm"
               >
-                <div className="pr-2">
-                  <span className="text-[10px] font-mono text-slate-500">
-                    {item.posterHandle} ({item.posterId.slice(0, 4)}…)
+                <div className="flex-1 pr-2">
+                  <span className="text-[10px] font-mono text-gray-500">
+                    {item.posterHandle || '@mesh-user'} (
+                    {item.posterId?.substring(0, 4) || '0000'}
+                    ...)
                   </span>
-                  <p className="text-xs font-semibold text-slate-50 mt-0.5 line-clamp-1">{item.title}</p>
-                  <p className="text-[11px] text-slate-400 mt-0.5 line-clamp-2">{item.description}</p>
+                  <p className="text-[12px] font-semibold text-white mt-0.5">
+                    {item.title}
+                  </p>
+                  <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">
+                    {item.description}
+                  </p>
                 </div>
-                <div className="flex-shrink-0">
-                  <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-red-600/30 text-red-300 border border-red-600">
-                    {item.status}
-                  </span>
-                </div>
+                <span
+                  className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                    item.status === 'Open'
+                      ? 'bg-red-600/25 text-red-300 border-red-600'
+                      : item.status === 'Claimed'
+                      ? 'bg-blue-600/25 text-blue-300 border-blue-600'
+                      : 'bg-[#00FFC0]/15 text-[#00FFC0] border-[#00FFC0]'
+                  }`}
+                >
+                  {item.status}
+                </span>
               </div>
             ))
           )}
-        </div>
-
-        {/* Profile */}
-        <div className={`${cardBg} ${borderColor} border px-3 py-3 rounded-xl text-center space-y-1.5`}>
-          <h3 className={`text-sm font-bold ${neon}`}>Your SupCast profile</h3>
-          <div className="flex justify-around text-center mt-1 text-xs">
-            <div>
-              <p className={`${neon} text-xl font-extrabold`}>{userProfile.xp}</p>
-              <p className="text-[10px] text-slate-400">Support XP</p>
-            </div>
-            <div>
-              <p className={`${accentBlue} text-xl font-extrabold`}>{userProfile.solved}</p>
-              <p className="text-[10px] text-slate-400">Solved</p>
-            </div>
-            <div>
-              <p className="text-yellow-400 text-xl font-extrabold">{userProfile.rating}</p>
-              <p className="text-[10px] text-slate-400">Rating</p>
-            </div>
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const MarketTab = () => {
-    const trendingActivities = [
-      {
-        id: 1,
-        title: 'NFT art auction',
-        description: 'Curated tokenized art drop. Limited editions.',
-        price: 1.2,
-        participants: 45,
-      },
-      {
-        id: 2,
-        title: 'DeFi lending pool',
-        description: 'Join a Base-native lending pool with live rewards.',
-        price: 0.05,
-        participants: 1200,
-      },
-      {
-        id: 3,
-        title: 'DAO vote · Proposal X',
-        description: 'Governance proposal for a creator ecosystem.',
-        price: 0,
-        participants: 890,
-      },
-      {
-        id: 4,
-        title: 'Virtual conf ticket',
-        description: 'Access to a web3 / Base dev conference.',
-        price: 0.8,
-        participants: 230,
-      },
-      {
-        id: 5,
-        title: 'GameFi quest · Lvl 7',
-        description: 'Complete an onchain quest and claim rewards.',
-        price: 0.01,
-        participants: 512,
-      },
-    ];
-
-    const allActivities = [
-      {
-        id: 6,
-        title: 'Smart contract audits',
-        description: 'Have your new contracts reviewed by pros.',
-        price: 2.5,
-        participants: 15,
-      },
-      {
-        id: 7,
-        title: 'Onchain education',
-        description: 'Learn Solidity and Base dev step by step.',
-        price: 0.3,
-        participants: 98,
-      },
-      {
-        id: 8,
-        title: 'Token pre-launch',
-        description: 'Early access to upcoming utility token.',
-        price: 0.1,
-        participants: 350,
-      },
-      {
-        id: 9,
-        title: 'Metaverse land deal',
-        description: 'Buy virtual land plots in a shared world.',
-        price: 3.5,
-        participants: 12,
-      },
-      {
-        id: 10,
-        title: 'Hackathon reg',
-        description: 'Register your team to a Base hackathon.',
-        price: 0,
-        participants: 75,
-      },
-      {
-        id: 11,
-        title: 'Gov. proposal',
-        description: 'Discuss direction of a key protocol.',
-        price: 0,
-        participants: 110,
-      },
-      {
-        id: 12,
-        title: 'Decentralized storage',
-        description: 'Buy storage on a distributed network.',
-        price: 0.005,
-        participants: 600,
-      },
-    ];
-
-    const partners = [
-      { name: 'DAO Builder Pro', icon: '🏛️', status: 'Aktiv' },
-      { name: 'GameFi Studio X', icon: '🎮', status: 'Aktiv' },
-      { name: 'Secure Audit Corp', icon: '🔒', status: 'Pending' },
-      { name: 'Metaverse Land Agency', icon: '🌍', status: 'Utkast' },
-    ];
-
-    const getIcon = (id) => {
-      const icons = ['🎨', '📈', '🗳️', '🎫', '⚔️', '📝', '🎓', '🚀', '🏡', '💻', '💡', '💾'];
-      return icons[id % icons.length];
-    };
-
-    const getStatusColor = (status) => {
-      switch (status) {
-        case 'Aktiv':
-          return 'bg-green-800 text-green-200';
-        case 'Pending':
-          return 'bg-yellow-800 text-yellow-200';
-        case 'Utkast':
-          return 'bg-slate-700 text-slate-200';
-        default:
-          return 'bg-slate-600 text-slate-100';
-      }
-    };
-
-    return (
-      <div className="space-y-4 text-xs">
-        {/* Top filter bar */}
-        <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-900 px-3 py-2 rounded-xl border border-slate-800">
-          <div className="flex items-center gap-2">
-            <span className="text-[11px] text-slate-400">Marketplace · Onchain actions</span>
-          </div>
-          <div className="flex items-center gap-2 text-[10px]">
-            <button className="px-2 py-1 bg-slate-800 rounded-full border border-slate-700 text-slate-200">
-              All
-            </button>
-            <button className="px-2 py-1 bg-slate-900 rounded-full border border-slate-700 text-slate-400">
-              Creator
-            </button>
-            <button className="px-2 py-1 bg-slate-900 rounded-full border border-slate-700 text-slate-400">
-              DeFi
-            </button>
-            <button className="px-2 py-1 bg-slate-900 rounded-full border border-slate-700 text-slate-400">
-              IRL
-            </button>
-          </div>
-        </div>
-
-        {/* Horizontal “rows” */}
-        <section>
-          <h2 className="text-xs font-semibold mb-1 text-slate-50">
-            Trending on Base <span className="text-[#00FFC0]">right now</span>
-          </h2>
-          <div className="flex overflow-x-scroll space-x-3 pb-2 scrollbar-hide">
-            {trendingActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className="w-64 flex-shrink-0 bg-slate-900 rounded-xl shadow-sm hover:shadow-lg transition duration-200 transform hover:scale-[1.01] border border-slate-800 cursor-pointer"
-              >
-                <div className="h-20 bg-slate-800/80 rounded-t-xl flex items-center justify-center">
-                  <span className="text-2xl text-[#00FFC0]">{getIcon(activity.id)}</span>
-                </div>
-                <div className="p-2.5">
-                  <h3 className="font-semibold text-[12px] truncate mb-0.5 text-slate-50">
-                    {activity.title}
-                  </h3>
-                  <p className="text-[10px] text-slate-400 line-clamp-2 h-8 mb-1">
-                    {activity.description}
-                  </p>
-                  <div className="flex justify-between items-center text-[10px]">
-                    <span className="text-green-400 font-bold">{activity.price} ETH</span>
-                    <span className="text-slate-400">{activity.participants} joined</span>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
         </section>
 
-        {/* Grid */}
-        <section>
-          <h2 className="text-xs font-semibold mb-1 text-slate-50">All active actions</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-            {allActivities.map((activity) => (
-              <div
-                key={activity.id}
-                className="bg-slate-900 rounded-lg shadow-sm p-3 transition duration-150 hover:bg-slate-800 border border-slate-800"
-              >
-                <div className="flex items-center space-x-2 mb-1">
-                  <span className="text-xl text-yellow-400">{getIcon(activity.id)}</span>
-                  <h3 className="text-[12px] font-semibold truncate text-slate-50">
-                    {activity.title}
-                  </h3>
-                </div>
-                <p className="text-[10px] text-slate-400 line-clamp-2 h-7 mb-1">
-                  {activity.description}
-                </p>
-                <div className="flex justify-between items-center text-[10px] mt-0.5">
-                  <span className="text-green-400 font-bold">{activity.price} ETH</span>
-                  <button className="text-[#00FFC0] hover:text-teal-200 font-medium">
-                    View details
-                  </button>
-                </div>
-              </div>
-            ))}
+        <section
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center space-y-2 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${neon}`}>
+            Your SupCast profile
+          </h3>
+          <div className="flex justify-around text-center mt-1">
+            <div>
+              <p className={`text-xl font-extrabold ${neon}`}>
+                {userProfile.xp}
+              </p>
+              <p className="text-[10px] text-gray-400">Support XP</p>
+            </div>
+            <div>
+              <p className={`text-xl font-extrabold ${accentBlue}`}>
+                {userProfile.solved}
+              </p>
+              <p className="text-[10px] text-gray-400">Solved</p>
+            </div>
+            <div>
+              <p className="text-xl font-extrabold text-yellow-400">
+                {userProfile.rating}
+              </p>
+              <p className="text-[10px] text-gray-400">Rating</p>
+            </div>
           </div>
-        </section>
-
-        {/* Partner overview */}
-        <section>
-          <h2 className="text-xs font-semibold mb-1 text-slate-50">Partner platforms overview</h2>
-          <div className="overflow-hidden rounded-lg border border-slate-800">
-            <table className="min-w-full divide-y divide-slate-800 text-[10px]">
-              <thead className="bg-slate-900">
-                <tr>
-                  <th className="px-3 py-2 text-left font-medium text-slate-400 uppercase tracking-wider">
-                    Partner
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-400 uppercase tracking-wider hidden sm:table-cell">
-                    Last activity
-                  </th>
-                  <th className="px-3 py-2 text-left font-medium text-slate-400 uppercase tracking-wider">
-                    Status
-                  </th>
-                  <th className="px-3 py-2" />
-                </tr>
-              </thead>
-              <tbody className="bg-[#050509] divide-y divide-slate-900">
-                {partners.map((p) => (
-                  <tr key={p.name}>
-                    <td className="px-3 py-2 whitespace-nowrap text-slate-100">
-                      <div className="flex items-center">
-                        <span className="text-lg mr-2">{p.icon}</span>
-                        <span>{p.name}</span>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-slate-400 hidden sm:table-cell">
-                      {p.status === 'Aktiv' ? 'Today, 14:30' : 'No recent activity'}
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap">
-                      <span
-                        className={`${getStatusColor(
-                          p.status,
-                        )} px-2 inline-flex text-[10px] leading-5 font-semibold rounded-full`}
-                      >
-                        {p.status}
-                      </span>
-                    </td>
-                    <td className="px-3 py-2 whitespace-nowrap text-right">
-                      <button className="text-[#00FFC0] hover:text-teal-200 font-medium">
-                        Manage
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {/* scrollbar-hide for the horizontal row */}
-          <style>{`
-            .scrollbar-hide::-webkit-scrollbar { display: none; }
-            .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
-          `}</style>
         </section>
       </div>
     );
   };
+
+  // --- SHEETS & NAV ---
+
+  const NavItem = ({ icon: Icon, tabName, label }) => (
+    <button
+      onClick={() => setCurrentTab(tabName)}
+      className={`flex flex-col items-center px-2 py-1 rounded-lg transition ${
+        currentTab === tabName
+          ? `${neon}`
+          : 'text-gray-500 hover:text-gray-200'
+      }`}
+    >
+      <Icon className="w-5 h-5" />
+      <span className="text-[10px] mt-0.5">{label}</span>
+    </button>
+  );
+
+  const Sheet = ({ id, title, children }) => (
+    <div
+      className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm sm:max-w-md h-[88vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duration-500 ease-out z-50 overflow-y-auto px-3 pt-1 pb-4 ${
+        activeSheet === id ? 'translate-y-0' : 'translate-y-full'
+      }`}
+    >
+      <div
+        className="w-full flex justify-center py-2 cursor-pointer"
+        onClick={() => setActiveSheet(null)}
+      >
+        <div className="h-1.5 w-10 bg-gray-600 rounded-full"></div>
+      </div>
+      <div className="px-1">
+        <h2 className={`text-base font-bold mb-3 ${neon}`}>{title}</h2>
+        {children}
+      </div>
+    </div>
+  );
+
+  const SheetAccount = () => (
+    <Sheet id="account" title="Account & rewards">
+      <div
+        className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl flex items-center gap-3 mb-4 shadow-md`}
+      >
+        <div
+          className={`w-9 h-9 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white`}
+        >
+          S
+        </div>
+        <div className="space-y-0.5">
+          <p className="text-sm font-semibold text-white">@spawniz</p>
+          <p className="text-[11px] text-gray-400">
+            Mesh ID:{' '}
+            {userId
+              ? `${userId.substring(0, 4)}...${userId.substring(
+                  userId.length - 4
+                )}`
+              : 'Loading...'}
+          </p>
+          <p className="text-[10px] text-gray-500 font-mono">
+            {userId || 'No wallet yet'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-2 mb-4">
+        <div
+          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
+        >
+          <p className="text-[11px] text-gray-400">Total XP</p>
+          <p className={`text-xl font-bold ${neon}`}>
+            {profileData.xpBalance.toLocaleString()}
+          </p>
+        </div>
+        <div
+          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
+        >
+          <p className="text-[11px] text-gray-400">SPN balance</p>
+          <p className={`text-xl font-bold ${accentBlue}`}>
+            {profileData.spawnTokenBalance.toFixed(2)}
+          </p>
+        </div>
+      </div>
+
+      <div
+        className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+      >
+        <h3 className={`text-xs font-semibold ${accentBlue}`}>
+          Referral system
+        </h3>
+        <p className="text-[11px] text-gray-400">
+          Share your mesh code to earn XP when friends interact with creator
+          tokens and packs.
+        </p>
+        <div className="flex items-center justify-between bg-[#101018] px-3 py-2 rounded-xl border border-gray-700">
+          <span className={`font-mono ${neon} text-[11px]`}>
+            SPAWN-MESH-74F
+          </span>
+          <button
+            className={`text-[11px] px-3 py-1 rounded-full font-semibold ${neonBg}/10 ${neon} border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition`}
+          >
+            Copy
+          </button>
+        </div>
+      </div>
+
+      <button className="w-full py-2.5 mt-5 bg-red-700/40 rounded-2xl font-semibold text-[11px] border border-red-700 text-white/80 hover:bg-red-700/60 transition flex items-center justify-center gap-1.5">
+        <LogOut className="w-4 h-4" />
+        <span>Switch wallet / logout (soon)</span>
+      </button>
+    </Sheet>
+  );
+
+  const SheetSettings = () => (
+    <Sheet id="settings" title="Settings & builders">
+      <div className="space-y-3">
+        <div
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            XP SDK & integration
+          </h3>
+          <p className="text-[11px] text-gray-400">
+            Connect SpawnEngine XP to your own apps, bots or frames.
+          </p>
+          <button
+            className={`w-full py-2 text-[11px] ${neonBg}/10 rounded-xl font-semibold ${neon} border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition`}
+          >
+            Show developer key (mock)
+          </button>
+        </div>
+
+        <div
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Premium mesh filters
+          </h3>
+          <p className="text-[11px] text-gray-400">
+            Unlock Alpha Hunters, whale alerts and advanced pack analytics.
+          </p>
+          <button className="w-full py-2 text-[11px] bg-gray-800 rounded-xl font-semibold text-gray-500 border border-gray-700 cursor-not-allowed">
+            Upgrade to premium (soon)
+          </button>
+        </div>
+
+        <div
+          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        >
+          <h3 className={`text-xs font-semibold ${accentBlue}`}>
+            Launchpad builder
+          </h3>
+          <p className="text-[11px] text-gray-400">
+            Future zero-code deployer for creator tokens, packs & quests.
+          </p>
+          <button className="w-full py-2 text-[11px] bg-blue-600/20 rounded-xl font-semibold text-blue-300 border border-blue-600 hover:bg-blue-600/40 transition">
+            Open creator panel (design only)
+          </button>
+        </div>
+
+        <button className="w-full py-2.25 mt-2 bg-[#101018] rounded-xl font-semibold text-[11px] border border-gray-700 text-gray-300 hover:bg-gray-800 transition">
+          Manage notifications (mock)
+        </button>
+      </div>
+    </Sheet>
+  );
 
   // --- RENDER TAB CONTENT ---
-
   const renderTabContent = () => {
+    if (!isAuthReady || isLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center h-48 gap-2">
+          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#00FFC0]"></div>
+          <p className="text-[12px] text-gray-300">
+            Loading mesh data...
+          </p>
+        </div>
+      );
+    }
+
     switch (currentTab) {
       case 'home':
         return <HomeTab />;
@@ -1168,22 +1439,19 @@ const App = () => {
         return <MeshTab />;
       case 'support':
         return <SupportTab />;
-      case 'market':
-        return <MarketTab />;
       default:
         return <HomeTab />;
     }
   };
 
-  // --- MAIN RENDER ---
-
+  // --- MAIN APP ---
   return (
     <div className={`min-h-screen ${darkBg} flex justify-center`}>
       <style>
         {`
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@200;300;400;500;600;700;800&display=swap');
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
           body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
-          button:disabled { cursor: not-allowed; opacity: 0.7; }
+          button:disabled { cursor: not-allowed; }
         `}
       </style>
 
@@ -1191,75 +1459,90 @@ const App = () => {
 
       <div
         id="app-container"
-        className="w-full max-w-5xl px-3 sm:px-4 pt-3 pb-16 sm:pb-18 flex flex-col"
+        className="relative w-full max-w-sm sm:max-w-md pt-3 px-3 pb-16 flex flex-col"
       >
         {/* Header */}
-        <header className="mb-4">
+        <header className="mb-4 space-y-2">
           <div className="flex justify-between items-center">
             <button
               onClick={() => setActiveSheet('account')}
-              className={`${cardBg} ${borderColor} border px-2.5 py-1.5 rounded-full flex items-center space-x-2 hover:border-[#00FFC0] transition text-xs`}
+              className={`flex items-center gap-2 px-2 py-1.5 rounded-full ${cardBg} border ${borderColor} transition hover:border-[#00FFC0]`}
             >
-              <div className="w-7 h-7 bg-[#9A00FF] rounded-full flex items-center justify-center text-[11px] font-bold text-white">
+              <div className="w-7 h-7 bg-[#9A00FF] rounded-full flex items-center justify-center text-xs font-bold text-white">
                 S
               </div>
-              <div className="text-[11px] leading-tight text-left">
-                <div className="font-semibold text-slate-50">@spawniz</div>
-                <div className="text-slate-400">SpawnEngine · Base mesh</div>
+              <div className="flex flex-col">
+                <span className="text-[12px] font-semibold text-white">
+                  @spawniz
+                </span>
+                <span className="text-[10px] text-gray-400">
+                  Mesh creator · Base
+                </span>
               </div>
             </button>
 
-            <div className="flex items-center space-x-2">
-              <span className="w-2 h-2 rounded-full bg-[#00FFC0] shadow-[0_0_8px_#00FFC0]" />
+            <div className="flex items-center gap-2">
               <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/60`}
+                className={`w-2 h-2 rounded-full ${neonBg} ${neonShadow}`}
+              ></span>
+              <span
+                className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/60 shadow-sm`}
               >
-                Mesh HUD v0.3
+                SpawnEngine · v1.0 HUD
               </span>
               <button
                 onClick={() => setActiveSheet('settings')}
-                className="p-1.5 rounded-full text-slate-400 hover:text-slate-100 hover:bg-slate-800"
+                className="text-gray-400 hover:text-gray-100 transition p-1.5 rounded-full hover:bg-[#11111A]"
               >
                 <Settings className="w-4 h-4" />
               </button>
             </div>
           </div>
 
-          {/* Info bar */}
-          <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[10px]">
-            <div className="flex space-x-1.5">
-              <span className="px-2 py-0.5 rounded-full bg-slate-900 text-slate-300 border border-slate-700">
-                BASE · Ecosystem
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-1.5">
+              <span
+                className={`text-[10px] px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/50`}
+              >
+                Base · Creator mesh
               </span>
-              <span className="px-2 py-0.5 rounded-full bg-blue-600/20 text-[#22A8FF] border border-blue-600/60">
-                Farcaster-ready
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-300 border border-blue-600/50">
+                Farcaster ready
               </span>
             </div>
-            <div className="flex space-x-3 font-mono text-slate-500 border-t border-b border-slate-800 py-0.5 px-1.5 w-full sm:w-auto justify-between sm:justify-end">
+            <div className="flex justify-between text-[10px] font-mono text-gray-500 border-y border-gray-800 py-1 px-1">
               <span>
-                GAS: <span className="text-slate-100">0.05 Gwei</span>
+                GAS: <span className="text-gray-100">0.05 gwei</span>
               </span>
               <span>
-                MODE: <span className="text-slate-100">Alpha mode</span>
+                MODE: <span className="text-gray-100">Alpha hunter</span>
               </span>
               <span>
-                WALLETS: <span className="text-slate-100">420k+</span>
+                WALLETS: <span className="text-gray-100">4 linked</span>
               </span>
             </div>
           </div>
         </header>
 
-        {/* Main content */}
-        <main className="flex-1 pb-2">{renderTabContent()}</main>
+        {/* Tabs */}
+        <main id="tab-content" className="flex-grow pb-2">
+          {renderTabContent()}
+        </main>
 
         {/* Bottom nav */}
-        <nav className="fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-5xl bg-[#050509]/95 border-t border-slate-800 h-14 flex items-center justify-around px-2 shadow-[0_-8px_20px_rgba(0,0,0,0.75)]">
-          <NavItem icon={Home} tabName="home" label="Home" />
-          <NavItem icon={Box} tabName="loot" label="Loot" />
+        <nav
+          id="bottom-nav"
+          className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm sm:max-w-md ${darkBg} flex justify-around items-center h-14 px-2 border-t border-gray-800 shadow-[0_-6px_16px_rgba(0,0,0,0.7)]`}
+        >
+          <NavItem icon={Home} tabName="home" label="Overview" />
+          <NavItem icon={Box} tabName="loot" label="Packs" />
           <NavItem icon={Sword} tabName="quests" label="Quests" />
           <NavItem icon={Hexagon} tabName="mesh" label="Mesh" />
-          <NavItem icon={MessageSquare} tabName="support" label="SupCast" />
-          <NavItem icon={Globe} tabName="market" label="Market" />
+          <NavItem
+            icon={MessageSquare}
+            tabName="support"
+            label="SupCast"
+          />
         </nav>
 
         {/* Sheets */}
