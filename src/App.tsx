@@ -1,37 +1,24 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, signInWithCustomToken, onAuthStateChanged } from 'firebase/auth';
-import { getFirestore, doc, onSnapshot, setDoc, collection, addDoc, runTransaction, Timestamp } from 'firebase/firestore';
-import {
-  Home,
-  Box,
-  Sword,
-  Hexagon,
-  Zap,
-  Settings,
-  Flame,
-  TrendingUp,
-  Star,
-  User,
-  LogOut,
-  ShieldCheck,
-  Globe,
-  DollarSign,
-  Activity,
-  MapPin,
-  MessageSquare
-} from 'lucide-react';
+import { getFirestore, doc, onSnapshot, setDoc, updateDoc, collection, query, addDoc, getDoc, runTransaction, Timestamp, orderBy, limit } from 'firebase/firestore';
+import { Home, Box, Sword, Hexagon, Zap, Settings, Flame, TrendingUp, Star, Gift, User, LogOut, Code, ShieldCheck, Globe, DollarSign, Activity, MapPin, MessageSquare, CheckCircle } from 'lucide-react';
 
 // --- GLOBAL FIREBASE CONFIGURATION (Provided by Environment) ---
+// Note: These variables are assumed to be defined by the execution environment.
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
+
+// FIX 1: använd __firebase_config, inte __app_id
 const firebaseConfig = JSON.parse(
   typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'
 );
+
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 
 // Helper to get Firestore paths
 const getUserProfilePath = (userId) => `artifacts/${appId}/users/${userId}/spawn_data/profile`;
 const getUserInventoryPath = (userId) => `artifacts/${appId}/users/${userId}/spawn_data/inventory`;
+// Public path for shared community data (SupCast)
 const getPublicSupCastCollectionPath = () => `artifacts/${appId}/public/data/supcast_cases`;
 
 const App = () => {
@@ -41,7 +28,7 @@ const App = () => {
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
   const [currentTab, setCurrentTab] = useState('home');
-  const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings'
+  const [activeSheet, setActiveSheet] = useState(null); // 'account' or 'settings'
   const [toast, setToast] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
   
@@ -53,15 +40,17 @@ const App = () => {
     lastCheckIn: null 
   });
   const [inventory, setInventory] = useState([]);
-  const [supCastFeed, setSupCastFeed] = useState([]);
+  const [supCastFeed, setSupCastFeed] = useState([]); // NEW: Real-time SupCast feed
 
   // SupCast Form State
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDesc, setNewCaseDesc] = useState('');
   const [isPostingCase, setIsPostingCase] = useState(false);
 
+
   // --- UI/UX COMPONENTS ---
 
+  // Toast Notification System
   const showToast = useCallback((message, type = 'info') => {
     let color = 'bg-neon-green/90';
     if (type === 'error') color = 'bg-red-600/90';
@@ -80,8 +69,8 @@ const App = () => {
     </div>
   );
   
-  // Color classes
-  const neon = 'text-[#00FFC0]';
+  // Custom Styles & Color Palette
+  const neon = 'text-[#00FFC0]'; // Neon Green
   const neonBg = 'bg-[#00FFC0]';
   const neonShadow = 'shadow-[0_0_15px_rgba(0,255,192,0.4)]';
   const accentBlue = 'text-[#00A6FF]';
@@ -99,11 +88,13 @@ const App = () => {
       setDb(firestoreInstance);
       setAuth(authInstance);
 
+      // 1. Listen for auth state changes
       const unsubscribe = onAuthStateChanged(authInstance, async (user) => {
         if (user) {
           setUserId(user.uid);
           setIsAuthReady(true);
         } else {
+          // 2. Sign in with custom token or anonymously
           try {
             if (initialAuthToken) {
               await signInWithCustomToken(authInstance, initialAuthToken);
@@ -113,7 +104,7 @@ const App = () => {
           } catch (e) {
             console.error("Auth failed:", e);
             showToast("Authentication failed. Check logs.", 'error');
-            setIsAuthReady(true);
+            setIsAuthReady(true); // Still set ready to prevent infinite loading
           }
         }
       });
@@ -124,40 +115,41 @@ const App = () => {
     }
   }, [showToast]);
   
-  // --- FIREBASE DATA LISTENERS ---
+  // --- FIREBASE DATA LISTENERS (onSnapshot) ---
 
   useEffect(() => {
     if (!isAuthReady || !userId || !db) return;
     setIsLoading(true);
 
-    const getTimestampMs = (t) => {
-      if (!t) return 0;
-      if (t instanceof Timestamp) return t.toMillis();
-      if (t instanceof Date) return t.getTime();
+    const getTsMs = (ts) => {
+      if (!ts) return 0;
+      if (ts instanceof Timestamp) return ts.toMillis();
+      if (ts instanceof Date) return ts.getTime();
       return 0;
     };
 
-    // Profile
+    // 1. Profile Data Listener
     const profileRef = doc(db, getUserProfilePath(userId));
     const unsubscribeProfile = onSnapshot(profileRef, (docSnap) => {
       if (docSnap.exists()) {
         const data = docSnap.data();
         setProfileData(prev => ({
           ...prev,
-          xpBalance: data.xpBalance ?? 0,
-          spawnTokenBalance: data.spawnTokenBalance ?? 0.00,
-          streakDays: data.streakDays ?? 0,
+          xpBalance: data.xpBalance || 0,
+          spawnTokenBalance: data.spawnTokenBalance || 0.00,
+          streakDays: data.streakDays || 0,
           lastCheckIn: data.lastCheckIn instanceof Timestamp ? data.lastCheckIn.toDate() : null
         }));
       } else {
+        // Initialize profile for new user
         const initialData = { 
-          xpBalance: 100,
+          xpBalance: 100, // Starting bonus
           spawnTokenBalance: 5.00,
           streakDays: 1,
           lastCheckIn: Timestamp.now()
         };
         setDoc(profileRef, initialData).then(() => {
-          setProfileData({
+          setProfileData({ 
             xpBalance: initialData.xpBalance,
             spawnTokenBalance: initialData.spawnTokenBalance,
             streakDays: initialData.streakDays,
@@ -173,7 +165,7 @@ const App = () => {
       setIsLoading(false);
     });
 
-    // Inventory
+    // 2. Inventory Data Listener
     const inventoryColRef = collection(db, getUserInventoryPath(userId));
     const unsubscribeInventory = onSnapshot(inventoryColRef, (snapshot) => {
       const newInventory = snapshot.docs.map(doc => ({
@@ -186,28 +178,31 @@ const App = () => {
       showToast("Error loading inventory.", 'error');
     });
 
-    // SupCast
+    // 3. SupCast Feed Listener (Public Data)
     const supCastColRef = collection(db, getPublicSupCastCollectionPath());
     const unsubscribeSupCast = onSnapshot(supCastColRef, (snapshot) => {
       const feed = snapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       }));
-      feed.sort((a, b) => getTimestampMs(b.timestamp) - getTimestampMs(a.timestamp));
-      setSupCastFeed(feed.slice(0, 50));
+      
+      // Client-side sorting by timestamp (newest first) and limiting for performance
+      feed.sort((a, b) => getTsMs(b.timestamp) - getTsMs(a.timestamp));
+      setSupCastFeed(feed.slice(0, 50)); // Limit to 50 latest cases
     }, (error) => {
       console.error("SupCast Snapshot Error:", error);
       showToast("Error loading SupCast feed.", 'error');
     });
 
+
     return () => {
       unsubscribeProfile();
       unsubscribeInventory();
-      unsubscribeSupCast();
+      unsubscribeSupCast(); // Cleanup public listener
     };
-  }, [isAuthReady, userId, db, showToast]);
+  }, [isAuthReady, userId, db, showToast]); // Reruns when auth status or db instance changes
 
-  // --- CORE LOGIC ---
+  // --- CORE PLATFORM LOGIC (Data Handlers) ---
   
   const handleCheckIn = useCallback(async () => {
     if (!db || !userId) return;
@@ -216,6 +211,7 @@ const App = () => {
     const now = new Date();
     const lastCheckIn = profileData.lastCheckIn;
     
+    // Check if 24 hours have passed since last check-in
     const isReadyForCheckIn = !lastCheckIn || (now.getTime() - lastCheckIn.getTime()) >= (24 * 60 * 60 * 1000);
 
     if (!isReadyForCheckIn) {
@@ -233,14 +229,15 @@ const App = () => {
         const data = profileDoc.data();
         let newStreakDays = data.streakDays || 0;
         let newXp = data.xpBalance || 0;
-        const checkInReward = 50 + (newStreakDays * 5);
+        const checkInReward = 50 + (newStreakDays * 5); // Scaling reward
 
+        // Check if previous check-in was within 48 hours to continue streak
         const isStreakContinued = !lastCheckIn || (now.getTime() - lastCheckIn.getTime()) < (48 * 60 * 60 * 1000);
 
         if (isStreakContinued) {
           newStreakDays += 1;
         } else {
-          newStreakDays = 1;
+          newStreakDays = 1; // Reset streak
           showToast('Streak lost, reset to Day 1.', 'error');
         }
 
@@ -263,6 +260,7 @@ const App = () => {
     if (!db || !userId) return showToast('Platform is initializing.', 'error');
     
     try {
+      // Use transaction to ensure atomic inventory and profile update
       await runTransaction(db, async (transaction) => {
         const packRef = doc(db, getUserInventoryPath(userId), packId);
         const profileRef = doc(db, getUserProfilePath(userId));
@@ -286,6 +284,7 @@ const App = () => {
         let itemType = null;
         let itemAmount = 0;
 
+        // Mock Drop Rates: Relic (5%), Shard (20%), Fragments (75%)
         if (dropType < 0.05) { 
           itemType = 'Relic';
           itemAmount = 1;
@@ -303,9 +302,13 @@ const App = () => {
           rewardText = `+${itemAmount} Fragments & 25 XP.`;
         }
 
+        // 1. Update Pack Count
         transaction.update(packRef, { count: currentPacks - 1 });
+
+        // 2. Update Profile XP
         transaction.update(profileRef, { xpBalance: currentXP + xpReward });
 
+        // 3. Update Item Inventory (Assuming separate docs for Fragments/Shards/Relics)
         const itemRef = doc(db, getUserInventoryPath(userId), itemType.toLowerCase());
         const itemDoc = await transaction.get(itemRef);
         const currentItemCount = itemDoc.exists() ? itemDoc.data().count : 0;
@@ -340,7 +343,8 @@ const App = () => {
         posterId: userId,
         expertId: null,
         timestamp: Timestamp.now(),
-        posterHandle: '@spawniz'
+        // To help other users find the creator's wallet/name (mocking Farcaster name here)
+        posterHandle: '@spawniz', 
       };
 
       await addDoc(supCastColRef, newCase);
@@ -356,7 +360,8 @@ const App = () => {
     }
   }, [db, userId, newCaseTitle, newCaseDesc, showToast]);
 
-  // --- HELPERS ---
+
+  // --- RENDERING HELPERS ---
 
   const formatTimeRemaining = (lastCheckIn) => {
     if (!lastCheckIn) return "Ready Now";
@@ -380,10 +385,10 @@ const App = () => {
     const nextCheckIn = profileData.lastCheckIn.getTime() + (24 * 60 * 60 * 1000);
     const timeRemainingMs = nextCheckIn - new Date().getTime();
     if (timeRemainingMs <= 0) return 0;
-    return 24 - (timeRemainingMs / (1000 * 60 * 60));
+    return 24 - (timeRemainingMs / (1000 * 60 * 60)); // Progress from 0 to 24
   }, [profileData.lastCheckIn]);
 
-  // --- TABS ---
+  // --- TAB CONTENT COMPONENTS ---
 
   const HomeTab = () => {
     const timeRemainingText = formatTimeRemaining(profileData.lastCheckIn);
@@ -398,6 +403,7 @@ const App = () => {
 
     return (
       <div className="space-y-6">
+        {/* Mesh Snapshot / Stats */}
         <div className="grid grid-cols-2 gap-3">
           <div className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center shadow-lg transition duration-200 hover:scale-[1.02] ${neonShadow}`}>
             <p className="text-xs text-gray-400 uppercase tracking-wider">XP BALANCE</p>
@@ -409,6 +415,7 @@ const App = () => {
           </div>
         </div>
 
+        {/* Daily Streak System */}
         <div className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}>
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-bold text-white">Daily Streak: {profileData.streakDays} Days</h3>
@@ -434,6 +441,7 @@ const App = () => {
           </button>
         </div>
         
+        {/* Today's Signals / Oracle Feed */}
         <div className="space-y-3">
             <h3 className={`text-xl font-bold ${accentBlue} tracking-wider`}>Oracle Feed <span className="text-sm font-light text-gray-500">(Pillar 8)</span></h3>
             <div className="space-y-2">
@@ -450,11 +458,13 @@ const App = () => {
   };
 
   const LootTab = () => {
+    // Helper to get item count from inventory
     const getItemCount = (type) => {
         const item = inventory.find(i => i.id === type.toLowerCase());
         return item ? item.count : 0;
     };
     
+    // Inventory items are stored by lowercase ID, e.g., 'startermeshpack'
     const starterPack = inventory.find(i => i.id === 'startermeshpack') || { id: 'startermeshpack', count: 1, type: 'Starter Mesh Pack' };
     const fragments = getItemCount('Fragment');
     const shards = getItemCount('Shard');
@@ -469,8 +479,10 @@ const App = () => {
           const fragRef = doc(db, getUserInventoryPath(userId), 'fragment');
           const shardRef = doc(db, getUserInventoryPath(userId), 'shard');
 
+          // 1. Deduct Fragments
           transaction.update(fragRef, { count: fragments - 3 });
 
+          // 2. Add Shard
           const shardDoc = await transaction.get(shardRef);
           const currentShardCount = shardDoc.exists() ? (shardDoc.data()?.count || 0) : 0;
           transaction.set(shardRef, {
@@ -495,6 +507,7 @@ const App = () => {
             <button className="w-1/3 py-2 text-sm rounded-lg text-gray-400 hover:bg-gray-800 transition-colors">Inventory</button>
         </div>
         
+        {/* Packs View */}
         <div className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}>
             <div className="flex justify-between items-start">
                 <h3 className="text-lg font-bold text-white">Starter Mesh Pack</h3>
@@ -513,6 +526,7 @@ const App = () => {
             </div>
         </div>
 
+        {/* Pull Lab View Mock */}
         <div className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-4 shadow-lg`}>
             <h3 className={`text-lg font-bold ${accentBlue}`}>Pull Lab (Synthesis)</h3>
             <p className="text-sm text-gray-400">Combine Fragments to synthesize rare Relics (Pillar 2).</p>
@@ -545,16 +559,18 @@ const App = () => {
   };
   
   const QuestsTab = () => {
+    // Mock data for Quests (Daily/Weekly/IRL)
     const quests = [
-        { type: 'Daily', title: "Daily Check-in (Completed)", reward: 10, status: 'Completed' },
-        { type: 'Daily', title: "Open 1 Pack", reward: 25, status: 'Claimable' },
-        { type: 'Weekly', title: "5 Day Streak Run", reward: 150, status: 'Locked' },
-        { type: 'Weekly', title: "Solve 1 SupCast Case", reward: 100, status: 'Claimable' },
-        { type: 'IRL', title: "Base Builders Meetup (Stockholm)", reward: 200, status: 'Locked' }
+        { type: 'Daily', title: "Daily Check-in (Completed)", reward: 10, status: 'Completed', icon: 'CheckCircle' },
+        { type: 'Daily', title: "Open 1 Pack", reward: 25, status: 'Claimable', icon: 'Gift' },
+        { type: 'Weekly', title: "5 Day Streak Run", reward: 150, status: 'Locked', icon: 'Sunrise' },
+        { type: 'Weekly', title: "Solve 1 SupCast Case", reward: 100, status: 'Claimable', icon: 'MessageCircle' },
+        { type: 'IRL', title: "Base Builders Meetup (Stockholm)", reward: 200, status: 'Locked', icon: 'MapPin' }
     ];
 
     const handleClaim = (questTitle) => {
         showToast(`Reward for "${questTitle}" claimed! +XP credited.`, 'success');
+        // In a real app: update Firestore for quest completion and XP balance
     };
 
     const getStatusStyle = (status) => {
@@ -615,6 +631,7 @@ const App = () => {
   };
 
   const MeshTab = () => {
+    // Mock data for Mesh Modes (Pillars 3 & 7)
     const modes = [
         { id: 'alpha', name: 'Alpha Hunters', desc: 'Tracks wallets with high Pack/Relic activity and unusual buying patterns.', icon: ShieldCheck },
         { id: 'new', name: 'New Creators', desc: 'Tracks newly deployed tokens/contracts via the Zero-Code Builder (Launchpad).', icon: Zap },
@@ -623,6 +640,7 @@ const App = () => {
 
     const [activeMode, setActiveMode] = useState(modes[0]);
 
+    // Legend data
     const legendItems = [
         { color: neon, name: 'XP Streams', icon: Activity },
         { color: accentBlue, name: 'Pack Pulls', icon: Box },
@@ -634,6 +652,7 @@ const App = () => {
         <div className="space-y-6">
             <h2 className={`text-2xl font-extrabold ${neon}`}>Mesh Explorer</h2>
 
+            {/* Mesh Modes */}
             <div className="space-y-4">
                 <h3 className={`text-lg font-bold ${accentBlue}`}>Select Mesh Mode</h3>
                 <div className="grid grid-cols-3 gap-2">
@@ -654,6 +673,7 @@ const App = () => {
                 </div>
             </div>
 
+            {/* Mesh Legend */}
             <div className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}>
                 <h3 className={`text-lg font-bold ${accentBlue}`}>Legend (Flows)</h3>
                 <div className="grid grid-cols-2 gap-2 text-sm">
@@ -666,6 +686,7 @@ const App = () => {
                 </div>
             </div>
 
+            {/* Full Mesh Placeholder */}
             <div className="h-48 w-full bg-gray-900/50 rounded-xl border border-gray-700 flex items-center justify-center shadow-inner">
                 <p className="text-gray-500 text-sm italic">3D WebGL Mesh Simulation Running</p>
             </div>
@@ -678,12 +699,14 @@ const App = () => {
   };
 
   const SupportTab = () => {
+    
     const userProfile = { solved: 7, xp: 350, rating: 4.5 };
     
     return (
       <div className="space-y-6">
           <h2 className={`text-2xl font-extrabold ${neon}`}>SupCast (Pillar 11)</h2>
 
+          {/* Ask Form */}
           <div className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}>
               <h3 className={`text-lg font-bold ${accentBlue}`}>Post a Question</h3>
               <input 
@@ -712,42 +735,47 @@ const App = () => {
               </button>
           </div>
 
+          {/* Feed */}
           <div className="space-y-3">
               <h3 className={`text-lg font-bold ${accentBlue}`}>Open Questions Feed ({supCastFeed.length} active)</h3>
               {supCastFeed.length === 0 ? (
                 <div className="p-4 bg-gray-900/50 text-gray-500 rounded-xl border border-gray-800 text-center">No open cases found. Be the first!</div>
               ) : (
                 supCastFeed.map(item => {
-                    const safePosterHandle = item.posterHandle || 'Unknown';
-                    const safePosterId = typeof item.posterId === 'string' ? item.posterId : '????';
-                    const status = item.status || 'Open';
+                  // FIX 2: säkra posterId & status så de inte kraschar
+                  const safePosterHandle = item.posterHandle || 'Unknown';
+                  const safePosterId = typeof item.posterId === 'string' ? item.posterId : '????';
+                  const shortId = safePosterId.slice(0, 4);
+                  const status = item.status || 'Open';
 
-                    return (
-                      <div key={item.id} className="p-3 bg-gray-900 rounded-xl border border-gray-800 flex justify-between items-start shadow-sm">
-                          <div className='flex-grow pr-2'>
-                            <span className="text-xs font-mono text-gray-500">
-                              Posted by: {safePosterHandle} ({safePosterId.substring(0, 4)}...)
+                  const statusClass =
+                    status === 'Open'
+                      ? 'bg-red-600/30 text-red-400 border-red-600'
+                      : status === 'Claimed'
+                        ? 'bg-blue-600/30 text-blue-400 border-blue-600'
+                        : 'bg-neon-green/30 text-neon border-neon';
+
+                  return (
+                    <div key={item.id} className="p-3 bg-gray-900 rounded-xl border border-gray-800 flex justify-between items-start shadow-sm">
+                        <div className='flex-grow pr-2'>
+                          <span className={`text-xs font-mono text-gray-500`}>
+                            Posted by: {safePosterHandle} ({shortId}...)
+                          </span>
+                          <p className="font-semibold text-white mt-0.5">{item.title}</p>
+                          <p className='text-sm text-gray-400/70 mt-1 line-clamp-2'>{item.description}</p>
+                        </div>
+                        <div className='flex-shrink-0'>
+                           <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${statusClass}`}>
+                                {status}
                             </span>
-                            <p className="font-semibold text-white mt-0.5">{item.title}</p>
-                            <p className='text-sm text-gray-400/70 mt-1 line-clamp-2'>{item.description}</p>
-                          </div>
-                          <div className='flex-shrink-0'>
-                             <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border ${
-                               status === 'Open'
-                                 ? 'bg-red-600/30 text-red-400 border-red-600'
-                                 : status === 'Claimed'
-                                   ? 'bg-blue-600/30 text-blue-400 border-blue-600'
-                                   : 'bg-neon-green/30 text-neon border-neon'
-                             }`}>
-                                  {status}
-                              </span>
-                          </div>
-                      </div>
-                    );
+                        </div>
+                    </div>
+                  );
                 })
               )}
           </div>
 
+          {/* Your Support Profile */}
           <div className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center space-y-2 shadow-lg`}>
               <h3 className={`text-xl font-bold ${neon}`}>Your SupCast Profile</h3>
               <div className="flex justify-around text-center mt-2">
@@ -769,7 +797,7 @@ const App = () => {
     );
   };
   
-  // --- LAYOUT ---
+  // --- LAYOUT & NAVIGATION COMPONENTS ---
 
   const NavItem = ({ icon: Icon, tabName, label }) => (
     <button 
@@ -855,14 +883,12 @@ const App = () => {
                 <button className={`w-full py-2.5 bg-blue-600/30 rounded-xl font-semibold text-blue-400 border border-blue-600/50 hover:bg-blue-600/50 transition text-sm`}>Open Creator Panel</button>
             </div>
 
-            <button className="w-full py-3 mt-6 bg-gray-800 rounded-xl font-semibold border border-gray-700 text-gray-300 hover:bg-gray-700 transition">
-              Manage Notifications
-            </button>
+            <button className="w-full py-3 mt-6 bg-gray-800 rounded-xl font-semibold border border-gray-700 text-gray-300 hover:bg-gray-700 transition">Manage Notifications</button>
         </div>
     </Sheet>
   );
 
-  // --- MAIN RENDER ---
+  // --- MAIN APP RENDER ---
   
   const renderTabContent = () => {
     if (!isAuthReady || isLoading) {
@@ -892,11 +918,13 @@ const App = () => {
           @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
           body { font-family: 'Inter', sans-serif; }
           .neon-glow { box-shadow: 0 0 5px #00FFC0, 0 0 10px #00FFC0 inset; }
+          /* General app container matching mobile viewports */
           #app-container {
             width: 100%;
             max-width: 480px; 
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5); /* Deep shadow to separate from background */
           }
+          /* Override default text styles for cleaner look */
           button:disabled { cursor: not-allowed; opacity: 0.7; }
         `}
       </style>
@@ -905,8 +933,10 @@ const App = () => {
 
       <div id="app-container" className="relative pt-4 px-4 pb-20 flex flex-col">
         
+        {/* 1. Header & Status Bar */}
         <header className="mb-6 space-y-3">
             <div className="flex justify-between items-center">
+                {/* Avatar-chip */}
                 <button onClick={() => setActiveSheet('account')} className={`flex items-center space-x-3 p-2 rounded-full ${cardBg} border ${borderColor} transition duration-200 hover:border-neon`}>
                     <div className="w-8 h-8 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white shadow-xl">S</div>
                     <div>
@@ -915,6 +945,7 @@ const App = () => {
                     </div>
                 </button>
                 
+                {/* Status-pill & Settings */}
                 <div className="flex space-x-2 items-center">
                     <span className={`w-2 h-2 rounded-full ${neonBg} neon-glow`}></span>
                     <span className={`text-xs font-mono px-2 py-0.5 rounded-full ${neonBg}/20 ${neon} border border-neon/50 shadow-md`}>Mesh v1.0 PRO</span>
@@ -924,6 +955,7 @@ const App = () => {
                 </div>
             </div>
 
+            {/* Badges & Stats Row */}
             <div className="flex flex-col space-y-2">
                 <div className="flex space-x-1.5">
                     <span className={`text-xs px-2.5 py-1 rounded-full ${neonBg}/20 ${neon} border border-neon/50`}>BASE · Ecosystem</span>
@@ -937,18 +969,21 @@ const App = () => {
             </div>
         </header>
 
+        {/* 2. Main Content Tabs */}
         <main id="tab-content" className="flex-grow pb-4">
           {renderTabContent()}
         </main>
         
+        {/* 3. Bottom Navigation */}
         <nav id="bottom-nav" className={`fixed bottom-0 w-full max-w-sm sm:max-w-md ${darkBg} flex justify-around items-center h-16 px-2 border-t border-gray-800 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]`}>
             <NavItem icon={Home} tabName="home" label="Home" />
             <NavItem icon={Box} tabName="loot" label="Loot" />
             <NavItem icon={Sword} tabName="quests" label="Quests" />
             <NavItem icon={Hexagon} tabName="mesh" label="Mesh" />
-            <NavItem icon={MessageSquare} tabName="support" label="SupCast" />
+            <NavItem icon={MessageSquare} tabName="support" label="SupCast" /> {/* Updated Icon/Label */}
         </nav>
 
+        {/* 4. Sheets (Modals) */}
         <SheetAccount />
         <SheetSettings />
       </div>
