@@ -1533,16 +1533,16 @@ const [isLoading, setIsLoading] = useState(false);
   // --- MAIN RENDER ---
 
   const renderTabContent = () => {
-    if (!isAuthReady || isLoading) {
-      return (
-        <div className="flex justify-center items-center h-48">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon"></div>
-          <p className="ml-3 text-white">
-            Loading Platform Data...
-          </p>
-        </div>
-      );
-    }
+  if (!isAuthReady || isLoading) {
+    return (
+      <div className="flex justify-center items-center h-48">
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-neon"></div>
+        <p className="ml-3 text-white">Loading Platform Data...</p>
+      </div>
+    );
+  }
+  ...
+};
 
     switch (currentTab) {
       case 'home':
