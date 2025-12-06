@@ -31,6 +31,7 @@ import {
   Flame,
   TrendingUp,
   Star,
+  Gift,
   User,
   LogOut,
   ShieldCheck,
@@ -39,21 +40,21 @@ import {
   Activity,
   MapPin,
   MessageSquare,
-  X,
 } from 'lucide-react';
 
-// --- GLOBAL FIREBASE CONFIGURATION (Provided by Environment) ---
+// --- GLOBAL ENV VARS INJEKTAS AV HOST / WEBVIEW ---
 const appId =
   typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig = JSON.parse(
-  typeof __firebase_config !== 'undefined' ? __firebase_config : '{}'
-);
+const firebaseConfig =
+  typeof __firebase_config !== 'undefined'
+    ? JSON.parse(__firebase_config)
+    : {};
 const initialAuthToken =
   typeof __initial_auth_token !== 'undefined'
     ? __initial_auth_token
     : null;
 
-// Firestore path helpers
+// Helper paths
 const getUserProfilePath = (userId) =>
   `artifacts/${appId}/users/${userId}/spawn_data/profile`;
 const getUserInventoryPath = (userId) =>
@@ -62,43 +63,51 @@ const getPublicSupCastCollectionPath = () =>
   `artifacts/${appId}/public/data/supcast_cases`;
 
 const App = () => {
-  // --- STATE ---
+  // --- CORE STATE ---
   const [db, setDb] = useState(null);
   const [auth, setAuth] = useState(null);
   const [userId, setUserId] = useState(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
   const [currentTab, setCurrentTab] = useState('home');
   const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings'
   const [toast, setToast] = useState(null);
 
+  // Profile / Inventory / SupCast
   const [profileData, setProfileData] = useState({
     xpBalance: 0,
-    spawnTokenBalance: 0.0,
+    spawnTokenBalance: 0,
     streakDays: 0,
     lastCheckIn: null,
   });
   const [inventory, setInventory] = useState([]);
   const [supCastFeed, setSupCastFeed] = useState([]);
 
+  // SupCast form
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDesc, setNewCaseDesc] = useState('');
   const [isPostingCase, setIsPostingCase] = useState(false);
+  const [newCaseCategory, setNewCaseCategory] =
+    useState('tokens'); // tokens | packs | infra | frames | ux
+  const [aiSuggestion, setAiSuggestion] = useState(null);
 
-  // --- THEME ---
-  const neon = 'text-[#00FFC0]';
-  const neonBg = 'bg-[#00FFC0]';
-  const neonShadow =
-    'shadow-[0_0_15px_rgba(0,255,192,0.25)]';
-  const accentBlue = 'text-[#00A6FF]';
-  const darkBg = 'bg-[#050509]';
-  const cardBg = 'bg-[#11111A]';
-  const borderColor = 'border-[#252535]';
+  // SupCast local chat (demo)
+  const [chatMessages, setChatMessages] = useState([
+    {
+      id: 1,
+      user: 'Mesh bot',
+      kind: 'system',
+      text: 'Welcome to SupCast — ask anything about Base: wallets, tokens, packs, frames, infra.',
+      ts: 'now',
+    },
+  ]);
+  const [newChatMessage, setNewChatMessage] = useState('');
 
-  // --- TOASTS ---
+  // --- TOAST ---
   const showToast = useCallback((message, type = 'info') => {
     let color = 'bg-[#00FFC0]/90';
     if (type === 'error') color = 'bg-red-600/90';
-    if (type === 'success') color = 'bg-[#00FFC0]/90';
     if (type === 'info') color = 'bg-[#00A6FF]/90';
 
     setToast({ message, color });
@@ -107,16 +116,24 @@ const App = () => {
 
   const ToastComponent = () =>
     toast && (
-      <div className="fixed top-3 left-1/2 -translate-x-1/2 z-[100] w-full max-w-xs transition-all duration-300">
+      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-xs transition-all duration-300">
         <div
-          className={`px-3 py-2 rounded-xl shadow-2xl text-xs sm:text-sm font-semibold text-gray-900 backdrop-blur-sm ${toast.color}`}
+          className={`p-3 rounded-xl shadow-2xl text-sm font-semibold text-gray-900 backdrop-blur-sm ${toast.color}`}
         >
           {toast.message}
         </div>
       </div>
     );
 
-  // --- FIREBASE INIT ---
+  // --- STYLE SHORTCUTS ---
+  const neon = 'text-[#00FFC0]';
+  const neonBg = 'bg-[#00FFC0]';
+  const accentBlue = 'text-[#00A6FF]';
+  const darkBg = 'bg-[#0A0A10]';
+  const cardBg = 'bg-[#151520]';
+  const borderColor = 'border-[#252535]';
+
+  // --- FIREBASE INIT / AUTH ---
   useEffect(() => {
     try {
       const app = initializeApp(firebaseConfig);
@@ -125,7 +142,7 @@ const App = () => {
       setDb(firestoreInstance);
       setAuth(authInstance);
 
-      const unsub = onAuthStateChanged(
+      const unsubscribe = onAuthStateChanged(
         authInstance,
         async (user) => {
           if (user) {
@@ -144,7 +161,7 @@ const App = () => {
             } catch (e) {
               console.error('Auth failed:', e);
               showToast(
-                'Authentication failed. Running in local mode.',
+                'Authentication failed. Check logs.',
                 'error'
               );
               setIsAuthReady(true);
@@ -153,29 +170,29 @@ const App = () => {
         }
       );
 
-      return () => unsub();
+      return () => unsubscribe();
     } catch (e) {
       console.error('Firebase Initialization Error:', e);
-      // Kör ändå UI i "offline/mock"
       setIsAuthReady(true);
     }
   }, [showToast]);
 
-  // --- SNAPSHOTS (om Firebase funkar) ---
+  // --- FIRESTORE LISTENERS ---
   useEffect(() => {
     if (!isAuthReady || !userId || !db) return;
+    setIsLoading(true);
 
-    // Profile
+    // PROFILE
     const profileRef = doc(db, getUserProfilePath(userId));
     const unsubProfile = onSnapshot(
       profileRef,
-      (snap) => {
-        if (snap.exists()) {
-          const data = snap.data();
+      (docSnap) => {
+        if (docSnap.exists()) {
+          const data = docSnap.data();
           setProfileData((prev) => ({
             ...prev,
             xpBalance: data.xpBalance || 0,
-            spawnTokenBalance: data.spawnTokenBalance || 0.0,
+            spawnTokenBalance: data.spawnTokenBalance || 0,
             streakDays: data.streakDays || 0,
             lastCheckIn:
               data.lastCheckIn instanceof Timestamp
@@ -185,7 +202,7 @@ const App = () => {
         } else {
           const initialData = {
             xpBalance: 100,
-            spawnTokenBalance: 5.0,
+            spawnTokenBalance: 5,
             streakDays: 1,
             lastCheckIn: Timestamp.now(),
           };
@@ -195,31 +212,30 @@ const App = () => {
               lastCheckIn: new Date(),
             });
             showToast(
-              'Welcome to SpawnEngine! Initial XP & SPN credited.',
+              'Welcome to SpawnEngine! Initial XP/SPN credited.',
               'success'
             );
           });
         }
+        setIsLoading(false);
       },
       (err) => {
         console.error('Profile Snapshot Error:', err);
         showToast('Error loading profile data.', 'error');
+        setIsLoading(false);
       }
     );
 
-    // Inventory
-    const invCol = collection(
-      db,
-      getUserInventoryPath(userId)
-    );
+    // INVENTORY
+    const invCol = collection(db, getUserInventoryPath(userId));
     const unsubInv = onSnapshot(
       invCol,
-      (snap) => {
-        const inv = snap.docs.map((d) => ({
+      (snapshot) => {
+        const newInventory = snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
         }));
-        setInventory(inv);
+        setInventory(newInventory);
       },
       (err) => {
         console.error('Inventory Snapshot Error:', err);
@@ -227,22 +243,19 @@ const App = () => {
       }
     );
 
-    // SupCast
-    const supCol = collection(
-      db,
-      getPublicSupCastCollectionPath()
-    );
+    // SUPCAST FEED (public)
+    const supCol = collection(db, getPublicSupCastCollectionPath());
     const unsubSup = onSnapshot(
       supCol,
-      (snap) => {
-        const feed = snap.docs.map((d) => ({
+      (snapshot) => {
+        const feed = snapshot.docs.map((d) => ({
           id: d.id,
           ...d.data(),
         }));
         feed.sort(
           (a, b) =>
-            (b.timestamp?.toDate()?.getTime() || 0) -
-            (a.timestamp?.toDate()?.getTime() || 0)
+            (b.timestamp?.toDate?.() || 0) -
+            (a.timestamp?.toDate?.() || 0)
         );
         setSupCastFeed(feed.slice(0, 50));
       },
@@ -259,213 +272,84 @@ const App = () => {
     };
   }, [isAuthReady, userId, db, showToast]);
 
-  // --- HELPERS ---
-  const formatTimeRemaining = (lastCheckIn) => {
-    if (!lastCheckIn) return 'Ready now';
-    const next =
-      lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const diff = next - Date.now();
-    if (diff <= 0) return 'Ready now';
-
-    const h = Math.floor(diff / (1000 * 60 * 60));
-    const m = Math.floor(
-      (diff % (1000 * 60 * 60)) / (1000 * 60)
-    );
-    return `${h}h ${m}m`;
-  };
-
-  const streakReady = useMemo(() => {
-    if (!profileData.lastCheckIn) return true;
-    return (
-      Date.now() -
-        profileData.lastCheckIn.getTime() >=
-      24 * 60 * 60 * 1000
-    );
-  }, [profileData.lastCheckIn]);
-
-  const streakHoursLeft = useMemo(() => {
-    if (!profileData.lastCheckIn) return 0;
-    const next =
-      profileData.lastCheckIn.getTime() +
-      24 * 60 * 60 * 1000;
-    const diff = next - Date.now();
-    if (diff <= 0) return 24;
-    return 24 - diff / (1000 * 60 * 60);
-  }, [profileData.lastCheckIn]);
-
-  // --- CORE ACTIONS ---
-  const handleCheckIn = useCallback(async () => {
-    if (!db || !userId) {
-      // Lokal mock bara
+  // --- CHECK-IN ---
+  const handleCheckIn = useCallback(
+    async () => {
+      if (!db || !userId) return;
+      const profileRef = doc(db, getUserProfilePath(userId));
       const now = new Date();
       const last = profileData.lastCheckIn;
+
       const ready =
         !last ||
-        now.getTime() - last.getTime() >=
-          24 * 60 * 60 * 1000;
+        now.getTime() - last.getTime() >= 24 * 60 * 60 * 1000;
+
       if (!ready) {
+        const timeRemainingMs =
+          last.getTime() +
+          24 * 60 * 60 * 1000 -
+          now.getTime();
+        const hours = Math.floor(
+          timeRemainingMs / (1000 * 60 * 60)
+        );
+        const minutes = Math.floor(
+          (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
+        );
         return showToast(
-          'Daily check-in already used (mock).',
+          `Next check-in in ${hours}h ${minutes}m.`,
           'info'
         );
       }
-      const newStreak = (profileData.streakDays || 0) + 1;
-      const reward = 50 + (newStreak - 1) * 5;
-      setProfileData((prev) => ({
-        ...prev,
-        streakDays: newStreak,
-        xpBalance: prev.xpBalance + reward,
-        lastCheckIn: now,
-      }));
-      return showToast(
-        `Day ${newStreak} check-in (mock): +${reward} XP`,
-        'success'
-      );
-    }
 
-    const profileRef = doc(db, getUserProfilePath(userId));
-    const now = new Date();
-    const last = profileData.lastCheckIn;
+      try {
+        await runTransaction(db, async (tx) => {
+          const profileDoc = await tx.get(profileRef);
+          if (!profileDoc.exists())
+            throw new Error('Profile does not exist');
 
-    const ready =
-      !last ||
-      now.getTime() - last.getTime() >=
-        24 * 60 * 60 * 1000;
+          const data = profileDoc.data();
+          let newStreak = data.streakDays || 0;
+          let newXp = data.xpBalance || 0;
+          const reward = 50 + newStreak * 5;
 
-    if (!ready) {
-      const remaining =
-        last.getTime() +
-        24 * 60 * 60 * 1000 -
-        now.getTime();
-      const h = Math.floor(
-        remaining / (1000 * 60 * 60)
-      );
-      const m = Math.floor(
-        (remaining % (1000 * 60 * 60)) /
-          (1000 * 60)
-      );
-      return showToast(
-        `Next check-in in ${h}h ${m}m.`,
-        'info'
-      );
-    }
+          const isStreakContinued =
+            !last ||
+            now.getTime() - last.getTime() <
+              48 * 60 * 60 * 1000;
 
-    try {
-      await runTransaction(db, async (tx) => {
-        const profileDoc = await tx.get(profileRef);
-        if (!profileDoc.exists())
-          throw new Error('Profile missing');
+          if (isStreakContinued) {
+            newStreak += 1;
+          } else {
+            newStreak = 1;
+            showToast('Streak lost, reset to Day 1.', 'error');
+          }
 
-        const data = profileDoc.data();
-        let newStreak = data.streakDays || 0;
-        let newXp = data.xpBalance || 0;
-        const reward = 50 + newStreak * 5;
+          newXp += reward;
 
-        const keepStreak =
-          !last ||
-          now.getTime() - last.getTime() <
-            48 * 60 * 60 * 1000;
+          tx.update(profileRef, {
+            streakDays: newStreak,
+            xpBalance: newXp,
+            lastCheckIn: Timestamp.now(),
+          });
 
-        if (keepStreak) {
-          newStreak += 1;
-        } else {
-          newStreak = 1;
           showToast(
-            'Streak lost, reset to Day 1.',
-            'error'
+            `Day ${newStreak} Check-in successful! +${reward} XP.`,
+            'success'
           );
-        }
-
-        newXp += reward;
-
-        tx.update(profileRef, {
-          streakDays: newStreak,
-          xpBalance: newXp,
-          lastCheckIn: Timestamp.now(),
         });
-        showToast(
-          `Day ${newStreak} check-in: +${reward} XP`,
-          'success'
-        );
-      });
-    } catch (e) {
-      console.error('Check-in failed:', e);
-      showToast(
-        'Check-in failed. Please try again.',
-        'error'
-      );
-    }
-  }, [db, userId, profileData.lastCheckIn, profileData.streakDays, profileData.xpBalance, showToast]);
+      } catch (e) {
+        console.error('Check-in failed:', e);
+        showToast('Check-in failed. Please try again.', 'error');
+      }
+    },
+    [db, userId, profileData.lastCheckIn, showToast]
+  );
 
+  // --- PACK OPEN ---
   const handlePackOpen = useCallback(
     async (packId) => {
-      if (!db || !userId) {
-        // Lokal mock – bränn 1 pack och ge fragment/shard
-        const starter =
-          inventory.find(
-            (i) => i.id === packId
-          ) || {
-            id: packId,
-            count: 1,
-            type: 'Starter Mesh Pack',
-          };
-        if (starter.count <= 0) {
-          return showToast(
-            'No packs left to open (mock).',
-            'error'
-          );
-        }
-        const r = Math.random();
-        let rewardText = '';
-        let xpReward = 0;
-        let type = '';
-        let amount = 0;
-
-        if (r < 0.05) {
-          type = 'Relic';
-          amount = 1;
-          xpReward = 500;
-          rewardText =
-            'MYTHIC DROP! +1 Relic & 500 XP (mock).';
-        } else if (r < 0.25) {
-          type = 'Shard';
-          amount = 1;
-          xpReward = 100;
-          rewardText = '+1 Shard & 100 XP (mock).';
-        } else {
-          type = 'Fragment';
-          amount = Math.floor(Math.random() * 3) + 1;
-          xpReward = 25;
-          rewardText = `+${amount} Fragments & 25 XP (mock).`;
-        }
-
-        // uppdatera inventory/xp lokalt
-        const newInv = inventory.map((it) =>
-          it.id === packId
-            ? { ...it, count: Math.max(0, (it.count || 0) - 1) }
-            : it
-        );
-        // lägg till loot
-        const lowerId = type.toLowerCase();
-        const existing = newInv.find((i) => i.id === lowerId);
-        if (existing) {
-          existing.count = (existing.count || 0) + amount;
-        } else {
-          newInv.push({
-            id: lowerId,
-            type,
-            count: amount,
-            lastAcquired: new Date(),
-          });
-        }
-
-        setInventory(newInv);
-        setProfileData((prev) => ({
-          ...prev,
-          xpBalance: prev.xpBalance + xpReward,
-        }));
-        return showToast(rewardText, 'success');
-      }
+      if (!db || !userId)
+        return showToast('Platform is initializing.', 'error');
 
       try {
         await runTransaction(db, async (tx) => {
@@ -482,21 +366,13 @@ const App = () => {
           const packDoc = await tx.get(packRef);
           const profileDoc = await tx.get(profileRef);
 
-          if (
-            !packDoc.exists() ||
-            packDoc.data().count <= 0
-          ) {
-            throw new Error(
-              'Pack not found or count is zero.'
-            );
-          }
-          if (!profileDoc.exists()) {
-            throw new Error('Profile not found.');
-          }
+          if (!packDoc.exists() || packDoc.data().count <= 0)
+            throw new Error('Pack not found or count zero');
+          if (!profileDoc.exists())
+            throw new Error('Profile not found');
 
           const currentPacks = packDoc.data().count;
-          const currentXP =
-            profileDoc.data().xpBalance || 0;
+          const currentXP = profileDoc.data().xpBalance || 0;
 
           const r = Math.random();
           let rewardText = '';
@@ -508,8 +384,7 @@ const App = () => {
             itemType = 'Relic';
             itemAmount = 1;
             xpReward = 500;
-            rewardText =
-              'MYTHIC DROP! +1 Relic & 500 XP.';
+            rewardText = 'MYTHIC DROP! +1 Relic & 500 XP.';
           } else if (r < 0.25) {
             itemType = 'Shard';
             itemAmount = 1;
@@ -517,16 +392,12 @@ const App = () => {
             rewardText = '+1 Shard & 100 XP.';
           } else {
             itemType = 'Fragment';
-            itemAmount =
-              Math.floor(Math.random() * 3) + 1;
+            itemAmount = Math.floor(Math.random() * 3) + 1;
             xpReward = 25;
             rewardText = `+${itemAmount} Fragments & 25 XP.`;
           }
 
-          tx.update(packRef, {
-            count: currentPacks - 1,
-          });
-
+          tx.update(packRef, { count: currentPacks - 1 });
           tx.update(profileRef, {
             xpBalance: currentXP + xpReward,
           });
@@ -536,16 +407,16 @@ const App = () => {
             getUserInventoryPath(userId),
             itemType.toLowerCase()
           );
-          const itemSnap = await tx.get(itemRef);
-          const currentCount = itemSnap.exists()
-            ? itemSnap.data().count
+          const itemDoc = await tx.get(itemRef);
+          const currentItemCount = itemDoc.exists()
+            ? itemDoc.data().count
             : 0;
 
           tx.set(
             itemRef,
             {
               type: itemType,
-              count: currentCount + itemAmount,
+              count: currentItemCount + itemAmount,
               lastAcquired: Timestamp.now(),
             },
             { merge: true }
@@ -554,16 +425,14 @@ const App = () => {
           showToast(rewardText, 'success');
         });
       } catch (e) {
-        console.error('Pack open failed:', e);
-        showToast(
-          `Open failed: ${e.message}`,
-          'error'
-        );
+        console.error('Open pack failed:', e);
+        showToast(`Open failed: ${e.message}`, 'error');
       }
     },
-    [db, userId, inventory, showToast]
+    [db, userId, showToast]
   );
 
+  // --- SUPCAST POST ---
   const handlePostCase = useCallback(
     async () => {
       if (!newCaseTitle || !newCaseDesc)
@@ -572,8 +441,8 @@ const App = () => {
           'error'
         );
 
+      // Offline/mock fallback
       if (!db || !userId) {
-        // Lokal mock
         const localCase = {
           id: `local-${Date.now()}`,
           title: newCaseTitle,
@@ -583,13 +452,12 @@ const App = () => {
           expertId: null,
           timestamp: { toDate: () => new Date() },
           posterHandle: '@local-mesh',
+          category: newCaseCategory,
         };
-        setSupCastFeed((prev) => [
-          localCase,
-          ...prev,
-        ]);
+        setSupCastFeed((prev) => [localCase, ...prev]);
         setNewCaseTitle('');
         setNewCaseDesc('');
+        setNewCaseCategory('tokens');
         return showToast(
           'Question added (local mock).',
           'success'
@@ -610,26 +478,64 @@ const App = () => {
           expertId: null,
           timestamp: Timestamp.now(),
           posterHandle: '@spawniz',
+          category: newCaseCategory,
         };
         await addDoc(supCol, newCase);
         setNewCaseTitle('');
         setNewCaseDesc('');
+        setNewCaseCategory('tokens');
         showToast(
           'Question posted to SupCast network!',
           'success'
         );
       } catch (e) {
         console.error('Post case failed:', e);
-        showToast(
-          'Failed to post case. Check network.',
-          'error'
-        );
+        showToast('Failed to post case. Check network.', 'error');
       } finally {
         setIsPostingCase(false);
       }
     },
-    [db, userId, newCaseTitle, newCaseDesc, showToast]
+    [
+      db,
+      userId,
+      newCaseTitle,
+      newCaseDesc,
+      newCaseCategory,
+      showToast,
+    ]
   );
+
+  // --- STREAK HELPERS ---
+  const formatTimeRemaining = (lastCheckIn) => {
+    if (!lastCheckIn) return 'Ready Now';
+    const next =
+      lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
+    const ms = next - Date.now();
+    if (ms <= 0) return 'Ready Now';
+    const h = Math.floor(ms / (1000 * 60 * 60));
+    const m = Math.floor(
+      (ms % (1000 * 60 * 60)) / (1000 * 60)
+    );
+    return `${h}h ${m}m`;
+  };
+
+  const streakReady = useMemo(() => {
+    if (!profileData.lastCheckIn) return true;
+    return (
+      Date.now() - profileData.lastCheckIn.getTime() >=
+      24 * 60 * 60 * 1000
+    );
+  }, [profileData.lastCheckIn]);
+
+  const streakHoursLeft = useMemo(() => {
+    if (!profileData.lastCheckIn) return 0;
+    const next =
+      profileData.lastCheckIn.getTime() +
+      24 * 60 * 60 * 1000;
+    const ms = next - Date.now();
+    if (ms <= 0) return 0;
+    return 24 - ms / (1000 * 60 * 60);
+  }, [profileData.lastCheckIn]);
 
   // --- TABS ---
 
@@ -642,300 +548,142 @@ const App = () => {
       (streakHoursLeft / 24) * 100
     );
 
-    const meshOverview = [
-      {
-        label: 'Active wallets',
-        value: '4',
-        sub: 'Mesh linked',
-      },
-      {
-        label: 'Creator tokens',
-        value: '12',
-        sub: 'Tracked',
-      },
-      {
-        label: 'Packs opened',
-        value: '31',
-        sub: 'Last 7 days',
-      },
-      {
-        label: 'SupCast cases',
-        value: supCastFeed.length.toString(),
-        sub: 'Open',
-      },
-    ];
-
-    const gasInfo = {
-      base: {
-        low: '0.05',
-        avg: '0.09',
-        high: '0.14',
-      },
-      pnl: {
-        profit30d: '+1.24 ETH',
-        fees30d: '0.31 ETH',
-        hitRate: '62%',
-      },
-    };
-
     const oracleFeed = [
       {
+        type: 'alpha',
         message:
-          "Alpha: wallet '0xab...c78' ramped pack volume by 220%.",
+          "Alpha Signal: Whale '0xab...c78' purchased 3 Launchpad Packs. Unusual activity.",
         icon: (
-          <ShieldCheck className="w-3.5 h-3.5 text-[#00FFC0]" />
+          <ShieldCheck
+            className={`w-4 h-4 ${neon}`}
+          />
         ),
       },
       {
+        type: 'gravity',
         message:
-          'Gravity: Creator mesh Y is pulling fresh liquidity on Base.',
+          'Gravity Shift: Creator Y cluster has +200% XP flow. Hype cycle initiating.',
         icon: (
-          <TrendingUp className="w-3.5 h-3.5 text-yellow-400" />
+          <TrendingUp className="w-4 h-4 text-yellow-400" />
         ),
       },
       {
+        type: 'burn',
         message:
-          "Burn: wallet '0xde...f12' reduced supply by 18% in 24h.",
+          "Burn Event: High-volume wallet '0xde...f12' burned 50% of Creator Z tokens.",
         icon: (
-          <Flame className="w-3.5 h-3.5 text-red-500" />
+          <Flame className="w-4 h-4 text-red-500" />
         ),
       },
       {
+        type: 'quest',
         message:
-          'Quest: 1 SupCast solve + 1 pack open today = bonus XP.',
+          'Quest: New IRL Quest available: Check-in at ETH London Meetup!',
         icon: (
-          <MapPin className="w-3.5 h-3.5 text-blue-400" />
+          <MapPin className="w-4 h-4 text-blue-400" />
         ),
       },
     ];
 
     return (
-      <div className="space-y-4">
-        {/* Mesh overview */}
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-lg`}
-        >
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2">
-              <Hexagon className="w-4 h-4 text-[#00FFC0]" />
-              <h2 className="text-xs font-semibold tracking-wide text-gray-300 uppercase">
-                Mesh overview
-              </h2>
-            </div>
-            <span className="text-[10px] font-mono text-gray-500">
-              Phase 1 · HUD v0.2
-            </span>
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-            {meshOverview.map((item, idx) => (
-              <div
-                key={idx}
-                className="px-2.5 py-2 rounded-xl bg-[#171722] border border-[#26263A] flex flex-col gap-0.5"
-              >
-                <span className="text-[10px] text-gray-400 uppercase tracking-wide">
-                  {item.label}
-                </span>
-                <span
-                  className={`text-lg font-bold leading-none ${neon}`}
-                >
-                  {item.value}
-                </span>
-                <span className="text-[10px] text-gray-500">
-                  {item.sub}
-                </span>
-              </div>
-            ))}
-          </div>
-        </section>
-
+      <div className="space-y-6">
         {/* XP / SPN */}
-        <section className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-2 gap-3">
           <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center shadow-md transition hover:scale-[1.01] ${neonShadow}`}
+            className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center shadow-lg transition duration-200 hover:scale-[1.02]`}
           >
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider">
-              Mesh XP
+            <p className="text-xs text-gray-400 uppercase tracking-wider">
+              XP BALANCE
             </p>
             <p
-              className={`text-2xl sm:text-3xl font-extrabold mt-1 ${neon}`}
+              className={`text-4xl font-extrabold mt-1 ${neon}`}
             >
               {profileData.xpBalance.toLocaleString()}
             </p>
-            <p className="text-[10px] text-gray-500 mt-1">
-              Quests · packs · automations
-            </p>
           </div>
           <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center shadow-md transition hover:scale-[1.01]`}
+            className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center shadow-lg transition duration-200 hover:scale-[1.02]`}
           >
-            <p className="text-[10px] text-gray-400 uppercase tracking-wider">
-              SPN balance
+            <p className="text-xs text-gray-400 uppercase tracking-wider">
+              SPAWN TOKEN
             </p>
             <p
-              className={`text-2xl sm:text-3xl font-extrabold mt-1 ${accentBlue}`}
+              className={`text-4xl font-extrabold mt-1 ${accentBlue}`}
             >
               {profileData.spawnTokenBalance.toFixed(2)}
             </p>
-            <p className="text-[10px] text-gray-500 mt-1">
-              Future mesh rewards
-            </p>
           </div>
-        </section>
+        </div>
 
         {/* Streak */}
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+        <div
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
         >
           <div className="flex justify-between items-center">
-            <div className="flex flex-col">
-              <span className="text-[10px] text-gray-400 uppercase tracking-wide">
-                Daily streak
-              </span>
-              <span className="text-sm font-semibold text-white">
-                {profileData.streakDays} days active
-              </span>
-            </div>
+            <h3 className="text-lg font-bold text-white">
+              Daily Streak: {profileData.streakDays} Days
+            </h3>
             <button
               onClick={handleCheckIn}
               disabled={!streakReady}
-              className={`px-3 py-1.5 rounded-full font-semibold text-[11px] border transition ${
+              className={`px-4 py-2 rounded-full font-bold text-sm shadow-md transition ${
                 streakReady
-                  ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/30`
-                  : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                  ? 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
               }`}
             >
-              {streakReady ? 'Check in now' : 'Check in'}
+              {streakReady ? 'Check In Now' : 'Check In'}
             </button>
           </div>
-          <p className="text-[11px] text-gray-400">
-            Next check-in:{' '}
-            <span className="font-mono text-gray-200">
+          <p className="text-xs text-gray-400">
+            Next check-in in:{' '}
+            <span className="font-mono text-white">
               {timeRemainingText}
             </span>
           </p>
-          <div className="w-full bg-gray-900 rounded-full h-1.5">
+          <div className="w-full bg-gray-800 rounded-full h-2">
             <div
-              className={`h-1.5 rounded-full ${neonBg} transition-all duration-1000`}
-              style={{
-                width: `${progressPercent}%`,
-              }}
+              className={`h-2 rounded-full ${neonBg} transition-all duration-1000`}
+              style={{ width: `${progressPercent}%` }}
             ></div>
           </div>
-          <button className="w-full text-[11px] text-center text-red-400/80 hover:text-red-300 pt-1 flex items-center justify-center gap-1">
-            <ShieldCheck className="w-3 h-3" />
-            <span>Preview streak insurance module</span>
+          <button className="w-full text-xs text-center text-red-400/80 hover:text-red-300 pt-1">
+            <ShieldCheck className="w-3 h-3 inline-block mr-1" />
+            Buy Streak Insurance (Pillar 3)
           </button>
-        </section>
-
-        {/* Gas & earnings */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl shadow-md`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <Activity className="w-3.5 h-3.5 text-[#00FFC0]" />
-                <span className="text-[11px] text-gray-300 font-semibold uppercase tracking-wide">
-                  Base gas
-                </span>
-              </div>
-              <span className="text-[10px] text-gray-500 font-mono">
-                Live mock
-              </span>
-            </div>
-            <div className="flex justify-between text-[11px]">
-              <div className="space-y-0.5">
-                <p className="text-gray-400">Low</p>
-                <p className="font-mono text-green-400">
-                  {gasInfo.base.low} gwei
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-gray-400">Average</p>
-                <p className="font-mono text-yellow-300">
-                  {gasInfo.base.avg} gwei
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-gray-400">High</p>
-                <p className="font-mono text-red-400">
-                  {gasInfo.base.high} gwei
-                </p>
-              </div>
-            </div>
-          </div>
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl shadow-md`}
-          >
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-1.5">
-                <DollarSign className="w-3.5 h-3.5 text-[#00A6FF]" />
-                <span className="text-[11px] text-gray-300 font-semibold uppercase tracking-wide">
-                  30d mesh earnings
-                </span>
-              </div>
-              <span className="text-[10px] text-gray-500 font-mono">
-                Simulation
-              </span>
-            </div>
-            <div className="flex justify-between text-[11px]">
-              <div className="space-y-0.5">
-                <p className="text-gray-400">Profit</p>
-                <p className="font-mono text-green-400">
-                  {gasInfo.pnl.profit30d}
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-gray-400">Fees</p>
-                <p className="font-mono text-red-300">
-                  {gasInfo.pnl.fees30d}
-                </p>
-              </div>
-              <div className="space-y-0.5">
-                <p className="text-gray-400">Hit rate</p>
-                <p className="font-mono text-[#00FFC0]">
-                  {gasInfo.pnl.hitRate}
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
+        </div>
 
         {/* Oracle feed */}
-        <section className="space-y-2">
-          <div className="flex items-center justify-between">
-            <h3
-              className={`text-xs font-semibold tracking-wide uppercase ${accentBlue}`}
-            >
-              Oracle feed
-            </h3>
-            <span className="text-[10px] text-gray-500">
-              Phase 1 · Signals
+        <div className="space-y-3">
+          <h3
+            className={`text-xl font-bold ${accentBlue} tracking-wider`}
+          >
+            Oracle Feed{' '}
+            <span className="text-sm font-light text-gray-500">
+              (Pillar 8)
             </span>
-          </div>
-          <div className="space-y-1.5">
-            {oracleFeed.map((item, index) => (
+          </h3>
+          <div className="space-y-2">
+            {oracleFeed.map((item, i) => (
               <div
-                key={index}
-                className="flex items-start gap-2 px-3 py-2 bg-[#101018] rounded-xl border border-[#252535] shadow-sm"
+                key={i}
+                className="flex items-start space-x-3 p-3 bg-gray-900 rounded-xl border border-gray-800 shadow-md"
               >
-                <div className="mt-0.5 flex-shrink-0">
+                <div className="flex-shrink-0 mt-0.5">
                   {item.icon}
                 </div>
-                <span className="text-[11px] text-gray-200 leading-snug">
+                <span className="text-sm text-gray-200">
                   {item.message}
                 </span>
               </div>
             ))}
           </div>
-        </section>
+        </div>
       </div>
     );
   };
 
   const LootTab = () => {
-    const [lootView, setLootView] = useState('packs'); // 'packs' | 'lab' | 'inventory'
-
     const getItemCount = (type) => {
       const item = inventory.find(
         (i) => i.id === type.toLowerCase()
@@ -951,44 +699,18 @@ const App = () => {
         count: 1,
         type: 'Starter Mesh Pack',
       };
+
     const fragments = getItemCount('Fragment');
     const shards = getItemCount('Shard');
     const relics = getItemCount('Relic');
 
     const handleSynthesis = async () => {
-      if (!db || !userId) {
-        if (fragments < 3) {
-          return showToast(
-            'Not enough Fragments (3 needed).',
-            'error'
-          );
-        }
-        const newInv = [...inventory];
-        const fragIdx = newInv.findIndex(
-          (i) => i.id === 'fragment'
-        );
-        if (fragIdx !== -1) {
-          newInv[fragIdx].count -= 3;
-        }
-        const shardIdx = newInv.findIndex(
-          (i) => i.id === 'shard'
-        );
-        if (shardIdx !== -1) {
-          newInv[shardIdx].count += 1;
-        } else {
-          newInv.push({
-            id: 'shard',
-            type: 'Shard',
-            count: 1,
-            lastAcquired: new Date(),
-          });
-        }
-        setInventory(newInv);
+      if (!db || !userId) return;
+      if (fragments < 3)
         return showToast(
-          'Synthesis successful! 3 Fragments → 1 Shard (mock).',
-          'success'
+          'Not enough Fragments (3 needed).',
+          'error'
         );
-      }
 
       try {
         await runTransaction(db, async (tx) => {
@@ -1003,12 +725,9 @@ const App = () => {
             'shard'
           );
 
-          tx.update(fragRef, {
-            count: fragments - 3,
-          });
-
+          tx.update(fragRef, { count: fragments - 3 });
           const shardDoc = await tx.get(shardRef);
-          const currentShard = shardDoc.exists()
+          const currentShardCount = shardDoc.exists()
             ? shardDoc.data().count
             : 0;
 
@@ -1016,7 +735,7 @@ const App = () => {
             shardRef,
             {
               type: 'Shard',
-              count: currentShard + 1,
+              count: currentShardCount + 1,
               lastAcquired: Timestamp.now(),
             },
             { merge: true }
@@ -1036,254 +755,199 @@ const App = () => {
       }
     };
 
-    const sortedInventory = [...inventory].sort((a, b) =>
-      a.id.localeCompare(b.id)
-    );
+    const handleEnterJackpot = () => {
+      showToast(
+        'Entered daily jackpot (mock). Onchain version hooks into Base later.',
+        'success'
+      );
+    };
 
     return (
-      <div className="space-y-4">
-        {/* Loot sub-tabs */}
-        <div className="flex justify-around bg-[#101018] px-1 py-1 rounded-2xl border border-[#26263A] shadow-inner text-[11px]">
-          <button
-            onClick={() => setLootView('packs')}
-            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
-              lootView === 'packs'
-                ? `${neonBg}/10 ${neon} border border-[#00FFC0]`
-                : 'text-gray-400 hover:bg-gray-800'
-            }`}
-          >
+      <div className="space-y-6">
+        {/* Sub-tabs top row (mock) */}
+        <div className="flex justify-around bg-gray-900 p-1 rounded-xl border border-gray-700/50 shadow-inner text-xs">
+          <button className="w-1/3 py-2 rounded-lg bg-[#00FFC0]/10 text-[#00FFC0] font-semibold">
             Packs
           </button>
-          <button
-            onClick={() => setLootView('lab')}
-            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
-              lootView === 'lab'
-                ? 'bg-blue-600/15 text-blue-300 border border-blue-600'
-                : 'text-gray-400 hover:bg-gray-800'
-            }`}
-          >
-            Pull lab
+          <button className="w-1/3 py-2 rounded-lg text-gray-400 hover:bg-gray-800">
+            Pull Lab
           </button>
-          <button
-            onClick={() => setLootView('inventory')}
-            className={`w-1/3 py-1.5 rounded-lg font-semibold ${
-              lootView === 'inventory'
-                ? 'bg-gray-800 text-gray-100 border border-gray-600'
-                : 'text-gray-400 hover:bg-gray-800'
-            }`}
-          >
+          <button className="w-1/3 py-2 rounded-lg text-gray-400 hover:bg-gray-800">
             Inventory
           </button>
         </div>
 
-        {/* Packs view */}
-        {lootView === 'packs' && (
-          <section
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
-          >
-            <div className="flex justify-between items-start">
-              <div>
-                <h3 className="text-sm font-semibold text-white">
-                  Starter mesh pack
-                </h3>
-                <p className="text-[11px] text-gray-400">
-                  Base pack with guaranteed Fragments and a
-                  chance for Shards.
-                </p>
-              </div>
-              <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-200 border border-gray-700">
-                ID: S001
-              </span>
-            </div>
-            <div className="flex justify-between items-center pt-2 border-t border-gray-800">
-              <span
-                className={`text-xl font-extrabold ${neon}`}
-              >
-                {starterPack.count} left
-              </span>
-              <button
-                onClick={() =>
-                  handlePackOpen(starterPack.id)
-                }
-                disabled={starterPack.count <= 0}
-                className={`px-3 py-1.5 rounded-lg font-semibold text-[11px] border transition ${
-                  starterPack.count > 0
-                    ? `${neonBg}/10 ${neon} border-[#00FFC0] hover:bg-[#00FFC0]/40`
-                    : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
-                }`}
-              >
-                Simulate open
-              </button>
-            </div>
-          </section>
-        )}
-
-        {/* Pull lab view */}
-        {lootView === 'lab' && (
-          <section
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-3 shadow-md`}
-          >
-            <div className="flex items-center justify-between">
-              <h3
-                className={`text-sm font-semibold ${accentBlue}`}
-              >
-                Pull lab · synthesis
-              </h3>
-              <span className="text-[10px] text-gray-500">
-                3 Fragments → 1 Shard
-              </span>
-            </div>
-            <p className="text-[11px] text-gray-400">
-              Upgrade low-tier loot into Shards. Relics stay
-              mythic and non-burnable. Perfect hook for creator
-              bounties and future jackpots.
-            </p>
-
-            <div className="grid grid-cols-3 text-center text-xs pt-2 border-t border-gray-800/50">
-              <div className="p-2 border-r border-gray-800">
-                <p className="text-xl font-bold text-white">
-                  {fragments}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Fragments
-                </p>
-              </div>
-              <div className="p-2 border-r border-gray-800">
-                <p
-                  className={`text-xl font-bold ${accentBlue}`}
-                >
-                  {shards}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Shards
-                </p>
-              </div>
-              <div className="p-2">
-                <p className="text-xl font-bold text-red-400">
-                  {relics}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Relics
-                </p>
-              </div>
-            </div>
-
+        {/* Starter pack */}
+        <div
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
+        >
+          <div className="flex justify-between items-start">
+            <h3 className="text-lg font-bold text-white">
+              Starter Mesh Pack
+            </h3>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-gray-700 text-white">
+              ID: S001
+            </span>
+          </div>
+          <p className="text-sm text-gray-400">
+            A base pack with guaranteed Fragments and a chance
+            for Shards. (Pillar 2)
+          </p>
+          <div className="flex justify-between items-center pt-2 border-t border-gray-800">
+            <span
+              className={`text-2xl font-extrabold ${neon}`}
+            >
+              {starterPack.count} available
+            </span>
             <button
-              onClick={handleSynthesis}
-              disabled={fragments < 3}
-              className={`w-full px-3 py-1.75 rounded-lg font-semibold text-[11px] border transition ${
-                fragments >= 3
-                  ? 'bg-blue-600/20 text-blue-300 border-blue-600 hover:bg-blue-600/40'
-                  : 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+              onClick={() => handlePackOpen(starterPack.id)}
+              disabled={starterPack.count <= 0}
+              className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
+                starterPack.count > 0
+                  ? 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]/60 hover:bg-[#00FFC0]/40'
+                  : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
               }`}
             >
-              Run synthesis (3 → 1)
+              Simulate Open
             </button>
-          </section>
-        )}
+          </div>
+        </div>
 
-        {/* Inventory view */}
-        {lootView === 'inventory' && (
-          <section
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <h3
-                className={`text-sm font-semibold ${accentBlue}`}
-              >
-                Inventory overview
-              </h3>
-              <span className="text-[10px] text-gray-500">
-                {sortedInventory.length} entries
-              </span>
-            </div>
+        {/* Pull Lab */}
+        <div
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-4 shadow-lg`}
+        >
+          <h3 className={`text-lg font-bold ${accentBlue}`}>
+            Pull Lab (Synthesis)
+          </h3>
+          <p className="text-sm text-gray-400">
+            Combine Fragments to synthesize rare Relics (Pillar
+            2).
+          </p>
 
-            {sortedInventory.length === 0 ? (
-              <p className="text-[11px] text-gray-500 text-center py-4">
-                No items yet. Open packs or run bounties to fill
-                this up.
+          <div className="grid grid-cols-3 text-center text-sm pt-2 border-t border-gray-800/50">
+            <div className="p-2 border-r border-gray-800">
+              <p className="text-3xl font-bold text-white">
+                {fragments}
               </p>
-            ) : (
-              <div className="space-y-1.5 max-h-64 overflow-y-auto pr-1">
-                {sortedInventory.map((item) => (
-                  <div
-                    key={item.id}
-                    className="flex justify-between items-center px-2.5 py-1.75 rounded-xl bg-[#101018] border border-gray-800 text-[11px]"
-                  >
-                    <div className="flex flex-col">
-                      <span className="font-semibold text-white">
-                        {item.type || item.id}
-                      </span>
-                      <span className="text-[10px] text-gray-500 font-mono">
-                        {item.id}
-                      </span>
-                    </div>
-                    <div className="text-right">
-                      <p className={`${neon} font-bold`}>
-                        x{item.count ?? 0}
-                      </p>
-                      {item.lastAcquired && (
-                        <p className="text-[10px] text-gray-500">
-                          recent
-                        </p>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </section>
-        )}
+              <p className="text-xs text-gray-400">
+                Fragments
+              </p>
+            </div>
+            <div className="p-2 border-r border-gray-800">
+              <p
+                className={`text-3xl font-bold ${accentBlue}`}
+              >
+                {shards}
+              </p>
+              <p className="text-xs text-gray-400">Shards</p>
+            </div>
+            <div className="p-2">
+              <p className="text-3xl font-bold text-red-400">
+                {relics}
+              </p>
+              <p className="text-xs text-gray-400">Relics</p>
+            </div>
+          </div>
+
+          <button
+            onClick={handleSynthesis}
+            disabled={fragments < 3}
+            className={`w-full px-4 py-2 rounded-lg font-bold text-sm transition ${
+              fragments >= 3
+                ? 'bg-blue-600/30 text-blue-400 border border-blue-600 hover:bg-blue-600/50'
+                : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
+            }`}
+          >
+            Run Synthesis (3 Fragments → 1 Shard)
+          </button>
+        </div>
+
+        {/* Daily Jackpot */}
+        <div
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-bold text-white flex items-center">
+                <Gift className="w-4 h-4 mr-2 text-yellow-400" />
+                Daily Jackpot · Mesh Pot
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                Cheap entry in USDC or ETH on Base later. Right
+                now: mock entry for UX.
+              </p>
+            </div>
+            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700">
+              v0.1 mock
+            </span>
+          </div>
+          <div className="flex justify-between items-center mt-2 text-sm">
+            <div>
+              <p className="text-gray-400 text-xs">
+                Est. pool (mock)
+              </p>
+              <p className="text-xl font-bold text-green-400">
+                123.45 ETH
+              </p>
+            </div>
+            <div className="text-right">
+              <p className="text-gray-400 text-xs">
+                Entries today (mock)
+              </p>
+              <p className="text-xl font-bold text-[#00A6FF]">
+                3 842
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleEnterJackpot}
+            className="w-full mt-2 py-2 rounded-lg text-sm font-semibold bg-purple-600/40 text-purple-100 border border-purple-500 hover:bg-purple-600/60 transition"
+          >
+            Enter Daily Jackpot (0.001 ETH · mock UX)
+          </button>
+        </div>
       </div>
     );
   };
 
   const QuestsTab = () => {
-    const [isSpinning, setIsSpinning] = useState(false);
-    const [lastJackpotResult, setLastJackpotResult] =
-      useState(null);
-    const [jackpotPool, setJackpotPool] = useState(2.4); // ETH pot (mock)
-
-    const dailyQuests = [
+    const quests = [
       {
         type: 'Daily',
-        title: 'Daily check-in (completed)',
+        title: 'Daily Check-in (Completed)',
         reward: 10,
         status: 'Completed',
       },
       {
         type: 'Daily',
-        title: 'Open 1 pack',
+        title: 'Open 1 Pack',
         reward: 25,
         status: 'Claimable',
       },
-    ];
-
-    // Creator bounties – “do this, win this”
-    const creatorBounties = [
       {
-        title: 'Create & mint a new Base token',
+        type: 'Weekly',
+        title: '5 Day Streak Run',
         reward: 150,
         status: 'Locked',
-        desc: 'Use any creator platform, link it in SupCast, and tag your mesh ID.',
       },
       {
-        title: 'Deploy & shill a pack series',
-        reward: 200,
-        status: 'Locked',
-        desc: 'Launch any pack collection and share a Farcaster cast with your pulls.',
-      },
-      {
-        title: 'Help another creator via SupCast',
+        type: 'Weekly',
+        title: 'Solve 1 SupCast Case',
         reward: 100,
         status: 'Claimable',
-        desc: 'Solve one SupCast case with a real fix (wallet / pack / XP issue).',
+      },
+      {
+        type: 'IRL',
+        title: 'Base Builders Meetup (Stockholm)',
+        reward: 200,
+        status: 'Locked',
       },
     ];
 
-    const handleClaim = (questTitle) => {
+    const handleClaim = (title) => {
       showToast(
-        `Reward for "${questTitle}" claimed! XP added.`,
+        `Reward for "${title}" claimed! +XP credited.`,
         'success'
       );
     };
@@ -1291,219 +955,92 @@ const App = () => {
     const getStatusStyle = (status) => {
       switch (status) {
         case 'Claimable':
-          return 'bg-[#00FFC0]/15 text-[#00FFC0] border-[#00FFC0]';
+          return 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]';
         case 'Completed':
-          return 'bg-green-600/25 text-green-300 border-green-600';
+          return 'bg-green-600/30 text-green-400 border border-green-600';
         case 'Locked':
         default:
-          return 'bg-gray-800 text-gray-500 border-gray-700';
+          return 'bg-gray-700/50 text-gray-400 border border-gray-600';
       }
-    };
-
-    const handleJackpotSpin = () => {
-      if (isSpinning) return;
-      setIsSpinning(true);
-
-      const r = Math.random();
-      let result =
-        'Base XP: +15 XP added to your mesh (mock).';
-
-      // simulera pott-rörelse
-      setJackpotPool((prev) => {
-        if (r < 0.03) {
-          // jackpot – pott minskar
-          return Math.max(0, prev - 0.5);
-        }
-        // annars pott växer lite
-        return parseFloat((prev + 0.005).toFixed(3));
-      });
-
-      if (r < 0.03) {
-        result =
-          '🎰 JACKPOT! +500 XP & 1 Relic ticket (mock).';
-        setProfileData((prev) => ({
-          ...prev,
-          xpBalance: prev.xpBalance + 500,
-        }));
-      } else if (r < 0.2) {
-        result =
-          'Nice hit: +120 XP & 1 Shard ticket (mock).';
-        setProfileData((prev) => ({
-          ...prev,
-          xpBalance: prev.xpBalance + 120,
-        }));
-      } else {
-        setProfileData((prev) => ({
-          ...prev,
-          xpBalance: prev.xpBalance + 15,
-        }));
-      }
-
-      setLastJackpotResult(result);
-      showToast(result, 'success');
-
-      setTimeout(() => {
-        setIsSpinning(false);
-      }, 700);
     };
 
     return (
-      <div className="space-y-4">
-        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
-          Quest matrix · creator bounties
+      <div className="space-y-6">
+        <h2 className={`text-2xl font-extrabold ${neon}`}>
+          Quests Platform
         </h2>
 
-        {/* Daily quests */}
-        <section className="space-y-2">
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Daily goals
+        <div className="space-y-3">
+          <h3 className={`text-lg font-bold ${accentBlue}`}>
+            Daily Goals
           </h3>
-          {dailyQuests.map((quest, index) => (
-            <div
-              key={index}
-              className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl flex justify-between items-center shadow-sm`}
-            >
-              <div className="space-y-0.5">
-                <p className="text-[12px] font-semibold text-white">
-                  {quest.title}
-                </p>
-                <p className="text-[11px] text-gray-400 flex items-center">
-                  <Star className="w-3 h-3 mr-1 text-yellow-400" />{' '}
-                  {quest.reward} XP
-                </p>
-              </div>
-              <button
-                onClick={() =>
-                  quest.status === 'Claimable' &&
-                  handleClaim(quest.title)
-                }
-                disabled={quest.status !== 'Claimable'}
-                className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
-                  quest.status
-                )}`}
+          {quests
+            .filter((q) => q.type === 'Daily')
+            .map((quest, i) => (
+              <div
+                key={i}
+                className={`${cardBg} ${borderColor} border p-3 rounded-xl flex justify-between items-center shadow-md`}
               >
-                {quest.status}
-              </button>
-            </div>
-          ))}
-        </section>
-
-        {/* Creator bounties */}
-        <section className="space-y-2">
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Creator bounties
-          </h3>
-          {creatorBounties.map((bounty, idx) => (
-            <div
-              key={idx}
-              className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
-            >
-              <div className="flex justify-between items-start mb-1">
-                <div className="space-y-0.5">
-                  <p className="text-[12px] font-semibold text-white">
-                    {bounty.title}
+                <div className="space-y-1">
+                  <p className="font-semibold text-white">
+                    {quest.title}
                   </p>
-                  <p className="text-[11px] text-gray-400">
-                    {bounty.desc}
+                  <p className="text-sm text-gray-400 flex items-center">
+                    <Star className="w-3 h-3 mr-1 text-yellow-400" />
+                    {quest.reward} XP Reward
                   </p>
                 </div>
-                <span className="text-[11px] text-gray-300 flex items-center">
-                  <Star className="w-3 h-3 mr-1 text-yellow-400" />
-                  {bounty.reward} XP
-                </span>
-              </div>
-              <div className="flex justify-between items-center mt-1">
-                <span className="text-[10px] text-gray-500">
-                  Turn your onchain work into XP streams.
-                </span>
                 <button
                   onClick={() =>
-                    bounty.status === 'Claimable' &&
-                    handleClaim(bounty.title)
+                    quest.status === 'Claimable' &&
+                    handleClaim(quest.title)
                   }
-                  disabled={bounty.status !== 'Claimable'}
-                  className={`px-2.5 py-1 text-[10px] rounded-full font-semibold border transition ${getStatusStyle(
-                    bounty.status
+                  disabled={quest.status !== 'Claimable'}
+                  className={`px-3 py-1 text-xs rounded-full font-semibold border transition ${getStatusStyle(
+                    quest.status
                   )}`}
                 >
-                  {bounty.status}
+                  {quest.status}
                 </button>
               </div>
-            </div>
-          ))}
-        </section>
+            ))}
+        </div>
 
-        {/* Daily jackpot – “soft casino” */}
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
-        >
-          <div className="flex items-center justify-between mb-1">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🎰</span>
-              <div className="flex flex-col">
-                <h3 className="text-sm font-semibold text-white">
-                  Daily XP jackpot
-                </h3>
-                <p className="text-[10px] text-gray-400">
-                  Spin once per day · XP-only simulation.
-                </p>
+        <div className="space-y-3">
+          <h3 className={`text-lg font-bold ${accentBlue}`}>
+            Weekly & IRL
+          </h3>
+          {quests
+            .filter((q) => q.type !== 'Daily')
+            .map((quest, i) => (
+              <div
+                key={i}
+                className={`${cardBg} ${borderColor} border p-3 rounded-xl flex justify-between items-center shadow-md`}
+              >
+                <div className="space-y-1">
+                  <p className="font-semibold text-white">
+                    {quest.title}
+                  </p>
+                  <p className="text-sm text-gray-400 flex items-center">
+                    <Star className="w-3 h-3 mr-1 text-yellow-400" />
+                    {quest.reward} XP Reward
+                  </p>
+                </div>
+                <button
+                  onClick={() =>
+                    quest.status === 'Claimable' &&
+                    handleClaim(quest.title)
+                  }
+                  disabled={quest.status !== 'Claimable'}
+                  className={`px-3 py-1 text-xs rounded-full font-semibold border transition ${getStatusStyle(
+                    quest.status
+                  )}`}
+                >
+                  {quest.status}
+                </button>
               </div>
-            </div>
-            <span className="text-[10px] text-gray-500">
-              House edge: just vibes
-            </span>
-          </div>
-
-          <div className="flex justify-between items-center text-[11px]">
-            <div className="space-y-0.5">
-              <p className="text-gray-400">
-                Current pot (mock)
-              </p>
-              <p className="text-gray-100 font-mono">
-                {jackpotPool.toFixed(3)} ETH on Base
-              </p>
-              <p className="text-[10px] text-gray-400 mt-1">
-                Buy-in (mock):{' '}
-                <span className="text-[#00FFC0] font-mono">
-                  0.0003 ETH
-                </span>{' '}
-                or{' '}
-                <span className="text-[#00FFC0] font-mono">
-                  0.25 USDC
-                </span>{' '}
-                per spin.
-              </p>
-            </div>
-            <button
-              onClick={handleJackpotSpin}
-              disabled={isSpinning}
-              className={`px-3 py-1.75 rounded-full font-semibold text-[11px] border transition ${
-                isSpinning
-                  ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
-                  : 'bg-purple-600/30 text-purple-200 border border-purple-600 hover:bg-purple-600/50'
-              }`}
-            >
-              {isSpinning ? 'Spinning...' : 'Spin daily'}
-            </button>
-          </div>
-
-          <div className="flex justify-between items-center text-[10px] text-gray-500 mt-1">
-            <span>
-              Chance: 3% jackpot · 17% good hit · 80% base XP
-            </span>
-          </div>
-
-          {lastJackpotResult && (
-            <div className="mt-2 px-2.5 py-2 rounded-xl bg-[#101018] border border-gray-700 text-[11px] text-gray-200">
-              {lastJackpotResult}
-            </div>
-          )}
-
-          <p className="text-[10px] text-gray-500">
-            This is visual only. Real ETH/USDC pot + entry will
-            come from onchain contracts later.
-          </p>
-        </section>
+            ))}
+        </div>
       </div>
     );
   };
@@ -1512,23 +1049,20 @@ const App = () => {
     const modes = [
       {
         id: 'alpha',
-        name: 'Alpha hunters',
-        desc:
-          'Track wallets with aggressive pack / creator token activity across Base.',
+        name: 'Alpha Hunters',
+        desc: 'Tracks wallets with high pack/relic activity and unusual buying patterns.',
         icon: ShieldCheck,
       },
       {
         id: 'new',
-        name: 'New creators',
-        desc:
-          'Surface tokens and packs launched via zero-code builders & miniapps.',
+        name: 'New Creators',
+        desc: 'Tracks newly deployed tokens/contracts via the Zero-Code Builder.',
         icon: Zap,
       },
       {
         id: 'gravity',
-        name: 'Gravity clusters',
-        desc:
-          'Visualize clusters of wallets with the highest XP flow and SPN exposure.',
+        name: 'Gravity Clusters',
+        desc: 'Visualizes clusters of wallets with the highest XP flows and token holdings.',
         icon: Globe,
       },
     ];
@@ -1536,95 +1070,97 @@ const App = () => {
     const [activeMode, setActiveMode] = useState(modes[0]);
 
     const legendItems = [
-      { color: neon, name: 'XP streams', icon: Activity },
-      {
-        color: accentBlue,
-        name: 'Pack pulls',
-        icon: Box,
-      },
+      { color: neon, name: 'XP Streams', icon: Activity },
+      { color: accentBlue, name: 'Pack Pulls', icon: Box },
       {
         color: 'text-red-500',
-        name: 'Burn events',
+        name: 'Burn Events',
         icon: Flame,
       },
       {
         color: 'text-yellow-400',
-        name: 'Creator flows',
+        name: 'Creator Coin Flows',
         icon: DollarSign,
       },
     ];
 
     return (
-      <div className="space-y-4">
-        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
-          Mesh explorer
+      <div className="space-y-6">
+        <h2 className={`text-2xl font-extrabold ${neon}`}>
+          Mesh Explorer
         </h2>
 
-        <section className="space-y-3">
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Mesh modes
+        <div className="space-y-4">
+          <h3 className={`text-lg font-bold ${accentBlue}`}>
+            Select Mesh Mode
           </h3>
-          <div className="grid grid-cols-3 gap-1.5">
+          <div className="grid grid-cols-3 gap-2">
             {modes.map((mode) => (
               <button
                 key={mode.id}
                 onClick={() => setActiveMode(mode)}
-                className={`px-2 py-2 rounded-xl border text-[11px] shadow-sm transition ${
+                className={`p-3 rounded-xl border transition shadow-md ${
                   activeMode.id === mode.id
-                    ? `border-[#00FFC0] ${neonBg}/10`
-                    : `${borderColor} bg-[#101018] hover:border-gray-500`
+                    ? 'border-[#00FFC0] bg-[#00FFC0]/15'
+                    : `${borderColor} bg-gray-900 hover:border-gray-500`
                 }`}
               >
                 <mode.icon
-                  className={`w-4 h-4 mx-auto mb-1 ${
+                  className={`w-5 h-5 mx-auto mb-1 ${
                     activeMode.id === mode.id
                       ? neon
                       : 'text-gray-400'
                   }`}
                 />
-                <span className="font-semibold text-white">
+                <span className="text-xs font-semibold text-white">
                   {mode.name}
                 </span>
               </button>
             ))}
           </div>
-          <div className="text-[11px] text-gray-400 px-3 py-2 border-l-4 border-[#00FFC0]/60 bg-[#101018]/80 rounded-r-xl">
+          <div className="text-sm text-gray-500 p-3 border-l-4 border-[#00FFC0]/50 bg-gray-900/50 rounded-r-xl">
             <span className="font-semibold text-white mr-1">
               {activeMode.name}:
             </span>
             {activeMode.desc}
           </div>
-        </section>
+        </div>
 
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        <div
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
         >
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Legend · flows
+          <h3 className={`text-lg font-bold ${accentBlue}`}>
+            Legend (Flows)
           </h3>
-          <div className="grid grid-cols-2 gap-2 text-[11px]">
-            {legendItems.map((item, index) => (
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            {legendItems.map((item, i) => (
               <div
-                key={index}
-                className="flex items-center gap-2 text-gray-300"
+                key={i}
+                className="flex items-center space-x-2"
               >
                 <item.icon
-                  className={`w-3.5 h-3.5 ${item.color}`}
+                  className={`w-4 h-4 ${
+                    item.color.includes('text-')
+                      ? item.color
+                      : neon
+                  }`}
                 />
-                <span>{item.name}</span>
+                <span className="text-gray-300">
+                  {item.name}
+                </span>
               </div>
             ))}
           </div>
-        </section>
+        </div>
 
-        <section className="h-40 w-full bg-[#101018] rounded-2xl border border-[#26263A] flex items-center justify-center shadow-inner">
-          <p className="text-[11px] text-gray-500 italic">
-            3D WebGL mesh simulation placeholder · Phase 5
+        <div className="h-48 w-full bg-gray-900/50 rounded-xl border border-gray-700 flex items-center justify-center shadow-inner">
+          <p className="text-gray-500 text-sm italic">
+            3D WebGL Mesh Simulation Placeholder
           </p>
-        </section>
+        </div>
 
-        <button className="w-full py-2.5 bg-blue-600/20 rounded-2xl font-semibold text-[11px] text-blue-300 border border-blue-600 hover:bg-blue-600/40 transition shadow-md">
-          Open full mesh explorer (future)
+        <button className="w-full py-3 bg-blue-600/30 rounded-xl font-semibold text-blue-400 border border-blue-600 hover:bg-blue-600/50 transition shadow-lg text-sm">
+          Open Full Mesh Explorer (v2.0 UI)
         </button>
       </div>
     );
@@ -1633,65 +1169,187 @@ const App = () => {
   const SupportTab = () => {
     const userProfile = { solved: 7, xp: 350, rating: 4.5 };
 
+    const handleSendChat = () => {
+      const text = newChatMessage.trim();
+      if (!text) return;
+      const msg = {
+        id: Date.now(),
+        user: '@you',
+        kind: 'user',
+        text,
+        ts: new Date().toLocaleTimeString('sv-SE', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+      };
+      setChatMessages((prev) => [...prev, msg]);
+      setNewChatMessage('');
+    };
+
+    const handleGenerateSuggestion = () => {
+      const latest =
+        supCastFeed.length > 0 ? supCastFeed[0] : null;
+
+      const baseTopic = latest
+        ? latest.title.toLowerCase()
+        : 'base wallet routing between Zora, Vibe and Farcaster frames';
+
+      const suggestions = [
+        `Visual map of ${baseTopic} on Base, clean diagram UI`,
+        `Cinematic dashboard for tracking ${baseTopic} in neon HUD style`,
+        `Minimalist onchain activity feed for ${baseTopic}, mobile app UI`,
+        `Isometric Base control room monitoring ${baseTopic}`,
+        `XP quest screen gamifying ${baseTopic} across creator tokens`,
+      ];
+
+      const choice =
+        suggestions[Math.floor(Math.random() * suggestions.length)];
+      setAiSuggestion(choice);
+      showToast('AI mesh helper generated a concept.', 'success');
+    };
+
+    const categoryLabel = (cat) => {
+      switch (cat) {
+        case 'tokens':
+          return 'Tokens & liquidity';
+        case 'packs':
+          return 'Packs & odds';
+        case 'infra':
+          return 'Infra / RPC / gas';
+        case 'frames':
+          return 'Frames & miniapps';
+        case 'ux':
+          return 'UX / bugs / flows';
+        default:
+          return 'Other';
+      }
+    };
+
     return (
       <div className="space-y-4">
-        <h2 className={`text-sm font-semibold uppercase tracking-wide ${neon}`}>
-          SupCast network
+        <h2
+          className={`${neon} text-sm font-semibold uppercase tracking-wide`}
+        >
+          SupCast · Base help desk
         </h2>
 
-        {/* Ask */}
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
-        >
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Post a question
-          </h3>
-          <input
-            type="text"
-            placeholder="Short title of the problem"
-            value={newCaseTitle}
-            onChange={(e) =>
-              setNewCaseTitle(e.target.value)
-            }
-            className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 text-[12px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
-          />
-          <textarea
-            placeholder="Describe your problem (wallet, chain, error code...)"
-            value={newCaseDesc}
-            onChange={(e) =>
-              setNewCaseDesc(e.target.value)
-            }
-            className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 h-20 text-[12px] text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
-          />
-          <button
-            onClick={handlePostCase}
-            disabled={
-              !newCaseTitle ||
-              !newCaseDesc ||
-              isPostingCase
-            }
-            className={`w-full py-2.25 rounded-lg font-semibold text-[11px] border transition ${
-              !newCaseTitle ||
-              !newCaseDesc ||
-              isPostingCase
-                ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
-                : 'bg-red-600/30 border-red-700 text-red-300 hover:bg-red-600/50'
-            }`}
+        {/* Row 1: Ask Base + AI helper */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Ask */}
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
           >
-            {isPostingCase
-              ? 'Posting...'
-              : 'Post to SupCast mesh'}
-          </button>
+            <h3 className={`${accentBlue} text-xs font-semibold`}>
+              Ask Base (any topic)
+            </h3>
+            <p className="text-[11px] text-gray-400">
+              Wallets, bridges, creator tokens, packs, frames,
+              infra, UX. If it touches Base, it belongs here.
+            </p>
+
+            <div className="flex gap-1.5 text-[11px]">
+              <select
+                value={newCaseCategory}
+                onChange={(e) =>
+                  setNewCaseCategory(e.target.value)
+                }
+                className="flex-1 px-2 py-1.5 rounded-lg bg-[#101018] border border-gray-700 text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+              >
+                <option value="tokens">Tokens / markets</option>
+                <option value="packs">Packs / odds</option>
+                <option value="infra">Infra / gas / RPC</option>
+                <option value="frames">Frames / miniapps</option>
+                <option value="ux">UX / bugs / flows</option>
+              </select>
+              <span className="px-2 py-1.5 rounded-lg bg-[#101018] border border-gray-700 text-[10px] text-gray-400 flex items-center">
+                <Globe className="w-3.5 h-3.5 mr-1 text-[#00FFC0]" />
+                Base-wide
+              </span>
+            </div>
+
+            <input
+              type="text"
+              placeholder="Short title: e.g. 'Bridge stuck from mainnet to Base'"
+              value={newCaseTitle}
+              onChange={(e) => setNewCaseTitle(e.target.value)}
+              className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 text-[12px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+            />
+
+            <textarea
+              placeholder="Describe what happened, tools you used (Zora, Vibe, Base app, frame, etc.)"
+              value={newCaseDesc}
+              onChange={(e) => setNewCaseDesc(e.target.value)}
+              className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 h-20 text-[12px] text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+            />
+
+            <button
+              onClick={handlePostCase}
+              disabled={
+                !newCaseTitle || !newCaseDesc || isPostingCase
+              }
+              className={`w-full py-2.25 rounded-lg font-semibold text-[11px] border transition ${
+                !newCaseTitle || !newCaseDesc || isPostingCase
+                  ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
+                  : 'bg-red-600/30 border-red-700 text-red-300 hover:bg-red-600/50'
+              }`}
+            >
+              {isPostingCase
+                ? 'Posting...'
+                : 'Post to SupCast mesh'}
+            </button>
+          </div>
+
+          {/* AI helper */}
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
+          >
+            <h3 className={`${accentBlue} text-xs font-semibold`}>
+              AI mesh helper (mock)
+            </h3>
+            <p className="text-[11px] text-gray-400">
+              Takes the latest Base problem and turns it into a
+              visual or UX concept you can build, cast or mint.
+            </p>
+
+            <button
+              onClick={handleGenerateSuggestion}
+              className="w-full px-3 py-2 rounded-xl text-[11px] font-semibold bg-pink-600/30 text-pink-200 border border-pink-600 hover:bg-pink-600/50 transition"
+            >
+              Generate concept from latest SupCast
+            </button>
+
+            {aiSuggestion && (
+              <div className="bg-[#101018] p-2.5 rounded-xl border-l-4 border-pink-500 mt-2">
+                <p className="text-[11px] text-gray-300">
+                  Concept:
+                </p>
+                <p className="text-[11px] font-mono text-pink-300 break-words mt-1">
+                  {aiSuggestion}
+                </p>
+                <p className="text-[10px] text-gray-500 mt-1">
+                  Copy this into MidJourney, Sora, Figma, or a new
+                  quest.
+                </p>
+              </div>
+            )}
+          </div>
         </section>
 
-        {/* Feed */}
+        {/* Row 2: Live questions */}
         <section className="space-y-2">
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Open questions ({supCastFeed.length})
-          </h3>
+          <div className="flex items-center justify-between">
+            <h3 className={`${accentBlue} text-xs font-semibold`}>
+              Live Base questions ({supCastFeed.length})
+            </h3>
+            <span className="text-[10px] text-gray-500">
+              Sorted by latest
+            </span>
+          </div>
+
           {supCastFeed.length === 0 ? (
             <div className="px-3 py-3 bg-[#101018] text-[11px] text-gray-500 rounded-2xl border border-gray-800 text-center">
-              No open cases yet. Be the first to ask.
+              No open cases yet. First wave of Base questions will
+              show up here.
             </div>
           ) : (
             supCastFeed.map((item) => (
@@ -1700,12 +1358,16 @@ const App = () => {
                 className="px-3 py-2.5 bg-[#101018] rounded-2xl border border-gray-800 flex justify-between items-start shadow-sm"
               >
                 <div className="flex-1 pr-2">
-                  <span className="text-[10px] font-mono text-gray-500">
-                    {item.posterHandle || '@mesh-user'} (
-                    {item.posterId?.substring(0, 4) ||
-                      '0000'}
-                    ...)
-                  </span>
+                  <div className="flex items-center gap-1 mb-0.5">
+                    <span className="text-[10px] font-mono text-gray-500">
+                      {item.posterHandle || '@mesh-user'} (
+                      {item.posterId?.substring(0, 4) || '0000'}
+                      ...)
+                    </span>
+                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#101018] border border-gray-700 text-gray-300">
+                      {categoryLabel(item.category || 'tokens')}
+                    </span>
+                  </div>
                   <p className="text-[12px] font-semibold text-white mt-0.5">
                     {item.title}
                   </p>
@@ -1729,104 +1391,167 @@ const App = () => {
           )}
         </section>
 
-        {/* Profile */}
-        <section
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center space-y-2 shadow-md`}
-        >
-          <h3 className={`text-xs font-semibold ${neon}`}>
-            Your SupCast profile
-          </h3>
-          <div className="flex justify-around text-center mt-1">
-            <div>
-              <p className={`text-xl font-extrabold ${neon}`}>
-                {userProfile.xp}
-              </p>
-              <p className="text-[10px] text-gray-400">
-                Support XP
-              </p>
+        {/* Row 3: Chat + profile */}
+        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+          {/* Chat */}
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl flex flex-col space-y-2 shadow-md`}
+          >
+            <h3 className={`${accentBlue} text-xs font-semibold`}>
+              Base mesh chat (local mock)
+            </h3>
+            <div className="flex-1 min-h-[120px] max-h-40 overflow-y-auto space-y-1.5 pr-1">
+              {chatMessages.map((m) => (
+                <div
+                  key={m.id}
+                  className={`flex ${
+                    m.kind === 'user'
+                      ? 'justify-end'
+                      : 'justify-start'
+                  }`}
+                >
+                  <div
+                    className={`max-w-[85%] px-2.5 py-1.5 rounded-xl text-[11px] shadow ${
+                      m.kind === 'user'
+                        ? 'bg-[#00FFC0]/20 text-white'
+                        : 'bg-[#101018] text-gray-100 border border-gray-700'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center mb-0.5">
+                      <span className="text-[9px] font-mono opacity-80">
+                        {m.user}
+                      </span>
+                      <span className="text-[9px] opacity-60">
+                        {m.ts}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap">
+                      {m.text}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-            <div>
-              <p
-                className={`text-xl font-extrabold ${accentBlue}`}
+            <div className="flex items-center mt-1">
+              <input
+                type="text"
+                value={newChatMessage}
+                onChange={(e) =>
+                  setNewChatMessage(e.target.value)
+                }
+                placeholder="Quick Base question / comment..."
+                className="flex-grow px-2.5 py-1.5 rounded-l-lg bg-[#101018] border border-gray-700 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+              />
+              <button
+                onClick={handleSendChat}
+                disabled={!newChatMessage.trim()}
+                className="px-2.5 py-1.5 rounded-r-lg text-[11px] font-semibold bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0] hover:bg-[#00FFC0]/40 disabled:opacity-40"
               >
-                {userProfile.solved}
-              </p>
-              <p className="text-[10px] text-gray-400">
-                Solved
-              </p>
+                Send
+              </button>
             </div>
-            <div>
-              <p className="text-xl font-extrabold text-yellow-400">
-                {userProfile.rating}
-              </p>
-              <p className="text-[10px] text-gray-400">
-                Rating
-              </p>
+            <p className="text-[9px] text-gray-500 mt-1">
+              Local demo chat. Later wired to a real public Base
+              room.
+            </p>
+          </div>
+
+          {/* Profile */}
+          <div
+            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center space-y-2 shadow-md`}
+          >
+            <h3 className={`${neon} text-xs font-semibold`}>
+              Your SupCast profile
+            </h3>
+            <div className="flex justify-around text-center mt-1">
+              <div>
+                <p
+                  className={`${neon} text-xl font-extrabold`}
+                >
+                  {userProfile.xp}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Support XP
+                </p>
+              </div>
+              <div>
+                <p
+                  className={`${accentBlue} text-xl font-extrabold`}
+                >
+                  {userProfile.solved}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Solved
+                </p>
+              </div>
+              <div>
+                <p className="text-xl font-extrabold text-yellow-400">
+                  {userProfile.rating}
+                </p>
+                <p className="text-[10px] text-gray-400">
+                  Rating
+                </p>
+              </div>
             </div>
+            <p className="text-[10px] text-gray-500">
+              Later this ties into real XP payouts, bounties and
+              Base-wide reputation.
+            </p>
           </div>
         </section>
       </div>
     );
   };
 
-  // --- SHEETS & NAV ---
+  // --- NAV & SHEETS ---
   const NavItem = ({ icon: Icon, tabName, label }) => (
     <button
       onClick={() => setCurrentTab(tabName)}
-      className={`flex flex-col items-center px-2 py-1 rounded-lg transition ${
+      className={`flex flex-col items-center p-2 rounded-lg transition ${
         currentTab === tabName
-          ? `${neon}`
-          : 'text-gray-500 hover:text-gray-200'
+          ? neon
+          : 'text-gray-500 hover:text-white'
       }`}
     >
-      <Icon className="w-5 h-5" />
-      <span className="text-[10px] mt-0.5">
-        {label}
-      </span>
+      <Icon className="w-6 h-6" />
+      <span className="text-xs mt-0.5">{label}</span>
     </button>
   );
 
   const Sheet = ({ id, title, children }) => (
     <div
-      className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm sm:max-w-md h-[88vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duration-500 ease-out z-50 overflow-y-auto px-3 pt-1 pb-4 ${
+      className={`fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-sm h-[90vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duration-500 ease-out z-50 overflow-y-auto p-4 sm:max-w-md ${
         activeSheet === id
           ? 'translate-y-0'
           : 'translate-y-full'
       }`}
     >
-      <div className="w-full flex justify-center py-2">
-        <div className="h-1.5 w-10 bg-gray-600 rounded-full" />
+      <div
+        className="w-full flex justify-center py-2 cursor-pointer"
+        onClick={() => setActiveSheet(null)}
+      >
+        <div className="h-1.5 w-12 bg-gray-600 rounded-full"></div>
       </div>
-      <div className="px-1">
-        <div className="flex items-center justify-between mb-2">
-          <h2 className={`text-base font-bold ${neon}`}>
-            {title}
-          </h2>
-          <button
-            onClick={() => setActiveSheet(null)}
-            className="p-1 rounded-full hover:bg-[#11111A] text-gray-400 hover:text-gray-100"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
+      <div className="p-2">
+        <h2 className={`text-2xl font-bold mb-6 ${neon}`}>
+          {title}
+        </h2>
         {children}
       </div>
     </div>
   );
 
   const SheetAccount = () => (
-    <Sheet id="account" title="Account & rewards">
+    <Sheet id="account" title="Account & Rewards">
       <div
-        className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl flex items-center gap-3 mb-4 shadow-md`}
+        className={`${cardBg} ${borderColor} border p-4 rounded-xl flex items-center space-x-4 mb-6 shadow-lg`}
       >
-        <div className="w-9 h-9 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white">
-          S
-        </div>
-        <div className="space-y-0.5">
-          <p className="text-sm font-semibold text-white">
+        <User className={`w-8 h-8 ${neon}`} />
+        <div>
+          <p className="text-base font-semibold text-white">
             @spawniz
           </p>
-          <p className="text-[11px] text-gray-400">
+          <p className="text-sm text-gray-400">
             Mesh ID:{' '}
             {userId
               ? `${userId.substring(
@@ -1835,134 +1560,134 @@ const App = () => {
                 )}...${userId.substring(
                   userId.length - 4
                 )}`
-              : 'Local mode'}
+              : 'Loading...'}
           </p>
-          <p className="text-[10px] text-gray-500 font-mono">
-            {userId || 'No wallet yet'}
+          <p className="text-xs text-gray-500 mt-1">
+            Full ID:{' '}
+            <span className="font-mono">
+              {userId || 'N/A'}
+            </span>
           </p>
         </div>
       </div>
 
-      <div className="grid grid-cols-2 gap-2 mb-4">
+      <div className="grid grid-cols-2 gap-4 mb-6">
         <div
-          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
+          className={`${cardBg} ${borderColor} border p-3 rounded-xl shadow-md`}
         >
-          <p className="text-[11px] text-gray-400">
-            Total XP
-          </p>
-          <p className={`text-xl font-bold ${neon}`}>
+          <p className="text-sm text-gray-400">Total XP</p>
+          <p
+            className={`text-2xl font-bold ${neon}`}
+          >
             {profileData.xpBalance.toLocaleString()}
           </p>
         </div>
         <div
-          className={`${cardBg} ${borderColor} border px-3 py-2.5 rounded-2xl shadow-sm`}
+          className={`${cardBg} ${borderColor} border p-3 rounded-xl shadow-md`}
         >
-          <p className="text-[11px] text-gray-400">
-            SPN balance
+          <p className="text-sm text-gray-400">
+            SPN Balance
           </p>
-          <p className={`text-xl font-bold ${accentBlue}`}>
+          <p
+            className={`text-2xl font-bold ${accentBlue}`}
+          >
             {profileData.spawnTokenBalance.toFixed(2)}
           </p>
         </div>
       </div>
 
       <div
-        className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+        className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
       >
-        <h3 className={`text-xs font-semibold ${accentBlue}`}>
-          Referral system
+        <h3 className={`text-lg font-semibold ${accentBlue}`}>
+          Referral System (Pillar 9)
         </h3>
-        <p className="text-[11px] text-gray-400">
-          Share your mesh code to earn XP when friends
-          interact with creator tokens and packs.
+        <p className="text-sm text-gray-400">
+          Share your unique code for XP bonuses and Mesh
+          earnings.
         </p>
-        <div className="flex items-center justify-between bg-[#101018] px-3 py-2 rounded-xl border border-gray-700">
-          <span className={`font-mono ${neon} text-[11px]`}>
+        <div className="flex justify-between items-center bg-gray-800 p-3 rounded-lg border border-gray-700">
+          <span
+            className={`font-mono ${neon} text-sm`}
+          >
             SPAWN-MESH-74F
           </span>
-          <button
-            className={`text-[11px] px-3 py-1 rounded-full font-semibold ${neonBg}/10 ${neon} border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition`}
-          >
+          <button className="text-xs px-3 py-1 rounded-full font-semibold bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition">
             Copy
           </button>
         </div>
       </div>
 
-      <button
-        onClick={() => setActiveSheet(null)}
-        className="w-full py-2.5 mt-5 bg-red-700/40 rounded-2xl font-semibold text-[11px] border border-red-700 text-white/80 hover:bg-red-700/60 transition flex items-center justify-center gap-1.5"
-      >
-        <LogOut className="w-4 h-4" />
-        <span>Close & return to HUD</span>
+      <button className="w-full py-3 mt-8 bg-red-700/50 rounded-xl font-semibold border border-red-700 text-white/80 hover:bg-red-700/70 transition flex items-center justify-center">
+        <LogOut className="w-5 h-5 mr-2" />
+        Switch Wallet / Logout
       </button>
     </Sheet>
   );
 
   const SheetSettings = () => (
-    <Sheet id="settings" title="Settings & builders">
-      <div className="space-y-3">
+    <Sheet id="settings" title="Settings & API">
+      <div className="space-y-4">
         <div
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-2 shadow-lg`}
         >
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            XP SDK & integration
+          <h3 className={`text-lg font-semibold ${accentBlue}`}>
+            XP SDK & Integration (Pillar 1)
           </h3>
-          <p className="text-[11px] text-gray-400">
-            Connect SpawnEngine XP to your own apps, bots or
-            frames.
+          <p className="text-sm text-gray-400">
+            Manage API keys to integrate SpawnEngine XP into your
+            own apps.
           </p>
-          <button
-            className={`w-full py-2 text-[11px] ${neonBg}/10 rounded-xl font-semibold ${neon} border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition`}
-          >
-            Show developer key (mock)
+          <button className="w-full py-2.5 bg-[#00FFC0]/20 rounded-xl font-semibold text-[#00FFC0] border border-[#00FFC0] hover:bg-[#00FFC0]/40 transition text-sm">
+            Show API Key
           </button>
         </div>
 
         <div
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-2 shadow-lg`}
         >
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Premium mesh filters
+          <h3 className={`text-lg font-semibold ${accentBlue}`}>
+            Premium Mesh Filters (Pillar 4)
           </h3>
-          <p className="text-[11px] text-gray-400">
-            Unlock Alpha Hunters, whale alerts and advanced
-            pack analytics.
+          <p className="text-sm text-gray-400">
+            Unlock Alpha Hunters and Whale Tracking. Requires
+            500 SPN staking.
           </p>
-          <button className="w-full py-2 text-[11px] bg-gray-800 rounded-xl font-semibold text-gray-500 border border-gray-700 cursor-not-allowed">
-            Upgrade to premium (soon)
+          <button className="w-full py-2.5 bg-gray-700/50 rounded-xl font-semibold text-gray-400 border border-gray-700/50 cursor-not-allowed text-sm">
+            Upgrade to Premium
           </button>
         </div>
 
         <div
-          className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2 shadow-md`}
+          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-2 shadow-lg`}
         >
-          <h3 className={`text-xs font-semibold ${accentBlue}`}>
-            Launchpad builder
+          <h3 className={`text-lg font-semibold ${accentBlue}`}>
+            Launchpad Builder (Pillar 8)
           </h3>
-          <p className="text-[11px] text-gray-400">
-            Future zero-code deployer for creator tokens, packs
-            & quests.
+          <p className="text-sm text-gray-400">
+            Access the Zero-Code Token/NFT Builder and Bonding
+            Curve configuration.
           </p>
-          <button className="w-full py-2 text-[11px] bg-blue-600/20 rounded-xl font-semibold text-blue-300 border border-blue-600 hover:bg-blue-600/40 transition">
-            Open creator panel (design only)
+          <button className="w-full py-2.5 bg-blue-600/30 rounded-xl font-semibold text-blue-400 border border-blue-600/50 hover:bg-blue-600/50 transition text-sm">
+            Open Creator Panel
           </button>
         </div>
 
-        <button className="w-full py-2.25 mt-2 bg-[#101018] rounded-xl font-semibold text-[11px] border border-gray-700 text-gray-300 hover:bg-gray-800 transition">
-          Manage notifications (mock)
+        <button className="w-full py-3 mt-6 bg-gray-800 rounded-xl font-semibold border border-gray-700 text-gray-300 hover:bg-gray-700 transition">
+          Manage Notifications
         </button>
       </div>
     </Sheet>
   );
 
-  // --- RENDER ---
+  // --- MAIN CONTENT ROUTER ---
   const renderTabContent = () => {
-    if (!isAuthReady) {
+    if (!isAuthReady || isLoading) {
       return (
-        <div className="flex flex-col items-center justify-center h-48 gap-2">
-          <div className="animate-spin rounded-full h-7 w-7 border-b-2 border-[#00FFC0]" />
-          <p className="text-[12px] text-gray-300">
-            Loading mesh data...
+        <div className="flex justify-center items-center h-48">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#00FFC0]"></div>
+          <p className="ml-3 text-white">
+            Loading Mesh Data...
           </p>
         </div>
       );
@@ -1984,13 +1709,19 @@ const App = () => {
     }
   };
 
+  // --- MAIN RENDER ---
   return (
     <div className={`min-h-screen ${darkBg} flex justify-center`}>
       <style>
         {`
-          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
-          body { font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif; }
-          button:disabled { cursor: not-allowed; }
+          @import url('https://fonts.googleapis.com/css2?family=Inter:wght@100..900&display=swap');
+          body { font-family: 'Inter', sans-serif; }
+          #app-container {
+            width: 100%;
+            max-width: 480px;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+          }
+          button:disabled { cursor: not-allowed; opacity: 0.7; }
         `}
       </style>
 
@@ -1998,94 +1729,97 @@ const App = () => {
 
       <div
         id="app-container"
-        className="relative w-full max-w-sm sm:max-w-md pt-3 px-3 pb-16 flex flex-col"
+        className="relative pt-4 px-4 pb-20 flex flex-col"
       >
         {/* Header */}
-        <header className="mb-4 space-y-2">
+        <header className="mb-6 space-y-3">
           <div className="flex justify-between items-center">
+            {/* Avatar chip */}
             <button
               onClick={() => setActiveSheet('account')}
-              className={`flex items-center gap-2 px-2 py-1.5 rounded-full ${cardBg} border ${borderColor} transition hover:border-[#00FFC0]`}
+              className={`flex items-center space-x-3 p-2 rounded-full ${cardBg} border ${borderColor} transition hover:border-[#00FFC0]`}
             >
-              <div className="w-7 h-7 bg-[#9A00FF] rounded-full flex items-center justify-center text-xs font-bold text-white">
+              <div className="w-8 h-8 bg-[#9A00FF] rounded-full flex items-center justify-center text-sm font-bold text-white shadow-xl">
                 S
               </div>
-              <div className="flex flex-col">
-                <span className="text-[12px] font-semibold text-white">
+              <div>
+                <div className="text-base font-semibold text-white">
                   @spawniz
-                </span>
-                <span className="text-[10px] text-gray-400">
-                  Mesh creator · Base
-                </span>
+                </div>
+                <div className="text-xs text-gray-400">
+                  Mesh ID · Creator
+                </div>
               </div>
             </button>
 
-            <div className="flex items-center gap-2">
+            {/* Status + settings */}
+            <div className="flex space-x-2 items-center">
               <span
-                className={`w-2 h-2 rounded-full ${neonBg} ${neonShadow}`}
-              />
-              <span
-                className={`text-[10px] font-mono px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/60 shadow-sm`}
-              >
-                SpawnEngine · v1.0 HUD
+                className={`w-2 h-2 rounded-full ${neonBg}`}
+              ></span>
+              <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-[#00FFC0]/10 text-[#00FFC0] border border-[#00FFC0]/50 shadow-md">
+                Mesh v1.0 PRO
               </span>
               <button
                 onClick={() => setActiveSheet('settings')}
-                className="text-gray-400 hover:text-gray-100 transition p-1.5 rounded-full hover:bg-[#11111A]"
+                className="text-gray-400 hover:text-white transition p-2 rounded-full hover:bg-gray-800"
               >
-                <Settings className="w-4 h-4" />
+                <Settings className="w-5 h-5" />
               </button>
             </div>
           </div>
 
-          <div className="flex flex-col gap-1">
-            <div className="flex gap-1.5">
-              <span
-                className={`text-[10px] px-2 py-0.5 rounded-full ${neonBg}/10 ${neon} border border-[#00FFC0]/50`}
-              >
-                Base · Creator mesh
+          {/* Badges + status row */}
+          <div className="flex flex-col space-y-2">
+            <div className="flex space-x-1.5">
+              <span className="text-xs px-2.5 py-1 rounded-full bg-[#00FFC0]/10 text-[#00FFC0] border border-[#00FFC0]/50">
+                BASE · Ecosystem
               </span>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-600/20 text-blue-300 border border-blue-600/50">
-                Farcaster ready
+              <span className="text-xs px-2.5 py-1 rounded-full bg-blue-600/20 text-blue-400 border border-blue-600/50">
+                Farcaster Ready
               </span>
             </div>
-            <div className="flex justify-between text-[10px] font-mono text-gray-500 border-y border-gray-800 py-1 px-1">
+            <div className="flex justify-between text-xs font-mono text-gray-500 border-t border-b border-gray-800 py-1.5 px-1">
               <span>
                 GAS:{' '}
-                <span className="text-gray-100">
-                  0.05 gwei
-                </span>
+                <span className="text-white">0.05 Gwei</span>
               </span>
               <span>
                 MODE:{' '}
-                <span className="text-gray-100">
-                  Alpha hunter
+                <span className="text-white">
+                  Alpha Hunter
                 </span>
               </span>
               <span>
                 WALLETS:{' '}
-                <span className="text-gray-100">
-                  4 linked
-                </span>
+                <span className="text-white">420k+</span>
               </span>
             </div>
           </div>
         </header>
 
         {/* Main */}
-        <main id="tab-content" className="flex-grow pb-2">
+        <main id="tab-content" className="flex-grow pb-4">
           {renderTabContent()}
         </main>
 
         {/* Bottom nav */}
         <nav
           id="bottom-nav"
-          className={`fixed bottom-0 left-1/2 -translate-x-1/2 w-full max-w-sm sm:max-w-md ${darkBg} flex justify-around items-center h-14 px-2 border-t border-gray-800 shadow-[0_-6px_16px_rgba(0,0,0,0.7)]`}
+          className={`fixed bottom-0 w-full max-w-sm sm:max-w-md ${darkBg} flex justify-around items-center h-16 px-2 border-t border-gray-800 shadow-[0_-5px_15px_rgba(0,0,0,0.5)]`}
         >
-          <NavItem icon={Home} tabName="home" label="Overview" />
-          <NavItem icon={Box} tabName="loot" label="Packs" />
-          <NavItem icon={Sword} tabName="quests" label="Quests" />
-          <NavItem icon={Hexagon} tabName="mesh" label="Mesh" />
+          <NavItem icon={Home} tabName="home" label="Home" />
+          <NavItem icon={Box} tabName="loot" label="Loot" />
+          <NavItem
+            icon={Sword}
+            tabName="quests"
+            label="Quests"
+          />
+          <NavItem
+            icon={Hexagon}
+            tabName="mesh"
+            label="Mesh"
+          />
           <NavItem
             icon={MessageSquare}
             tabName="support"
