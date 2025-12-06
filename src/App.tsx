@@ -16,6 +16,7 @@ import {
   Star,
   Shuffle,
   Wallet,
+  Settings,
   HelpCircle,
 } from 'lucide-react';
 
