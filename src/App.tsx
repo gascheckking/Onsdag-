@@ -1104,7 +1104,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#020617] text-gray-100">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
         {/* header */}
-        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+                <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black shadow-lg">
               SE
@@ -1116,7 +1116,9 @@ const App: React.FC = () => {
               </p>
             </div>
           </div>
-          <div className="flex items-center gap-2 text-xs">
+
+          {/* right side + settings dropdown */}
+          <div className="relative flex items-center gap-2 text-xs">
             <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
               <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
               <span className="text-gray-300">Wallet: not connected (UI only)</span>
@@ -1125,6 +1127,52 @@ const App: React.FC = () => {
               <Zap className="w-3.5 h-3.5 text-yellow-300" />
               <span className="text-gray-300">Streak {streakDays}d</span>
             </div>
+
+            {/* settings button */}
+            <button
+              onClick={() => setShowSettings((prev) => !prev)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#00FFC0]"
+            >
+              <HelpCircle className="w-3.5 h-3.5 text-[#7dd3fc]" />
+              <span>Settings</span>
+            </button>
+
+            {/* dropdown */}
+            {showSettings && (
+              <div className="absolute right-0 top-11 w-56 rounded-2xl bg-[#020617] border border-[#1f2937] shadow-xl z-20 text-[11px]">
+                <div className="px-3 py-2 border-b border-[#111827]">
+                  <p className="text-gray-300 font-semibold">SpawnEngine OS</p>
+                  <p className="text-[10px] text-gray-500">Landing links · mock only (for now)</p>
+                </div>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => setActiveTab('supcast')}
+                >
+                  SupCast · Base help desk
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => setActiveTab('loot')}
+                >
+                  Loot & Pull Lab · entropy UI
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => setActiveTab('market')}
+                >
+                  Market · tokens & packs index
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => setActiveTab('mesh')}
+                >
+                  Mesh Explorer · bubble map
+                </button>
+                <div className="px-3 py-2 border-t border-[#111827] text-[10px] text-gray-500">
+                  Later: docs, API keys, miniapp embed code, onchain modules.
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
