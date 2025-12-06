@@ -75,6 +75,7 @@ const App: React.FC = () => {
   const [streakDays, setStreakDays] = useState<number>(3);
   const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
   const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
