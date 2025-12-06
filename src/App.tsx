@@ -1201,8 +1201,97 @@ const App: React.FC = () => {
           {activeTab === 'leaderboard' && <LeaderboardTab />}
           {activeTab === 'profile' && <ProfileTab />}
         </main>
-      </div>
-    </div>
+        {isSettingsOpen && (
+          <div
+            className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm"
+            onClick={() => setIsSettingsOpen(false)}
+          >
+            <div
+              className="w-full max-w-md rounded-t-3xl bg-[#020617] border-t border-[#1b1f2b] p-4 pb-6 shadow-[0_-24px_80px_rgba(0,0,0,0.95)]"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* drag handle */}
+              <div className="flex justify-center mb-3">
+                <div className="w-12 h-1.5 rounded-full bg-gray-700" />
+              </div>
+
+              {/* header rad med avatar + stäng */}
+              <div className="flex items-center justify-between mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white">
+                    S
+                  </div>
+                  <div>
+                    <p className="text-sm text-white font-semibold">@spawniz</p>
+                    <p className="text-[11px] text-gray-400">Mesh ID · Creator</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setIsSettingsOpen(false)}
+                  className="w-8 h-8 flex items-center justify-center rounded-full bg-[#020617] border border-[#1f2937] hover:border-red-500 transition"
+                >
+                  <X className="w-4 h-4 text-gray-400" />
+                </button>
+              </div>
+
+              <h2 className="text-[#00FFC0] text-sm font-semibold mb-2">Settings & API</h2>
+
+              <div className="space-y-3 text-[11px]">
+                {/* Pillar 1 */}
+                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
+                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
+                    XP SDK & Integration (Pillar 1)
+                  </p>
+                  <p className="text-gray-400 mb-2">
+                    Manage API keys to integrate SpawnEngine XP into your own apps.
+                  </p>
+                  <button
+                    onClick={() => setShowApiKey((v) => !v)}
+                    className="w-full mt-1 py-2 rounded-xl bg-emerald-600 text-[11px] font-semibold text-white hover:bg-emerald-500"
+                  >
+                    {showApiKey ? 'Hide API Key' : 'Show API Key'}
+                  </button>
+                  {showApiKey && (
+                    <p className="mt-2 px-2 py-1.5 rounded-lg bg-black/50 border border-emerald-700 font-mono text-[10px] text-emerald-300 break-all">
+                      spn_test_0xDEADBEEF_MESH_XP_KEY
+                    </p>
+                  )}
+                </div>
+
+                {/* Pillar 4 */}
+                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
+                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
+                    Premium Mesh Filters (Pillar 4)
+                  </p>
+                  <p className="text-gray-400 mb-2">
+                    Unlock Alpha Hunters and Whale Tracking. Requires 500 SPN staking.
+                  </p>
+                  <button className="w-full py-2 rounded-xl bg-slate-800 text-[11px] font-semibold text-gray-300 border border-slate-600">
+                    Upgrade to Premium
+                  </button>
+                </div>
+
+                {/* Pillar 8 */}
+                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
+                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
+                    Launchpad Builder (Pillar 8)
+                  </p>
+                  <p className="text-gray-400 mb-2">
+                    Access the Zero-Code Token/NFT Builder and Bonding Curve configuration.
+                  </p>
+                  <button className="w-full py-2 rounded-xl bg-indigo-600 text-[11px] font-semibold text-white hover:bg-indigo-500">
+                    Open Creator Panel
+                  </button>
+                </div>
+
+                {/* Notifications */}
+                <button className="w-full mt-1 py-2.5 rounded-xl bg-slate-900 border border-[#1f2937] text-[11px] font-semibold text-gray-200">
+                  Manage Notifications
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
   );
 };
 
