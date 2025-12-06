@@ -1,99 +1,119 @@
-import React, {
-  useState,
-  useEffect,
-  useCallback,
-  useMemo,
-} from 'react';
-import { initializeApp } from 'firebase/app';
-import {
-  getAuth,
-  signInAnonymously,
-  signInWithCustomToken,
-  onAuthStateChanged,
-} from 'firebase/auth';
-import {
-  getFirestore,
-  doc,
-  onSnapshot,
-  setDoc,
-  collection,
-  addDoc,
-  runTransaction,
-  Timestamp,
-} from 'firebase/firestore';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   Home,
+  Zap,
   Box,
   Sword,
-  Hexagon,
-  Zap,
-  Settings,
-  Flame,
-  TrendingUp,
-  Star,
-  Gift,
+  Network,
+  MessageCircle,
   User,
-  LogOut,
-  ShieldCheck,
+  Trophy,
+  Activity as ActivityIcon,
   Globe,
-  DollarSign,
-  Activity,
-  MapPin,
-  MessageSquare,
+  Coins,
+  ArrowRight,
+  Sparkles,
+  Star,
+  Shuffle,
+  Wallet,
+  HelpCircle,
 } from 'lucide-react';
 
-// --- GLOBAL ENV VARS INJEKTAS AV HOST / WEBVIEW ---
-const appId =
-  typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-const firebaseConfig =
-  typeof __firebase_config !== 'undefined'
-    ? JSON.parse(__firebase_config)
-    : {};
-const initialAuthToken =
-  typeof __initial_auth_token !== 'undefined'
-    ? __initial_auth_token
-    : null;
+type MainTab =
+  | 'home'
+  | 'loot'
+  | 'market'
+  | 'trading'
+  | 'quests'
+  | 'mesh'
+  | 'supcast'
+  | 'leaderboard'
+  | 'profile';
 
-// Helper paths
-const getUserProfilePath = (userId) =>
-  `artifacts/${appId}/users/${userId}/spawn_data/profile`;
-const getUserInventoryPath = (userId) =>
-  `artifacts/${appId}/users/${userId}/spawn_data/inventory`;
-const getPublicSupCastCollectionPath = () =>
-  `artifacts/${appId}/public/data/supcast_cases`;
+type SupCastCategory = 'tokens' | 'packs' | 'infra' | 'frames' | 'ux';
 
-const App = () => {
-  // --- CORE STATE ---
-  const [db, setDb] = useState(null);
-  const [auth, setAuth] = useState(null);
-  const [userId, setUserId] = useState(null);
-  const [isAuthReady, setIsAuthReady] = useState(false);
-  const [isLoading, setIsLoading] = useState(true);
+interface SupCastCase {
+  id: string;
+  title: string;
+  description: string;
+  status: 'Open' | 'Claimed' | 'Solved';
+  posterHandle: string;
+  posterId: string;
+  category: SupCastCategory;
+}
 
-  const [currentTab, setCurrentTab] = useState('home');
-  const [activeSheet, setActiveSheet] = useState(null); // 'account' | 'settings'
-  const [toast, setToast] = useState(null);
+interface MeshChatMessage {
+  id: number;
+  user: string;
+  kind: 'system' | 'user';
+  text: string;
+  ts: string;
+}
 
-  // Profile / Inventory / SupCast
-  const [profileData, setProfileData] = useState({
-    xpBalance: 0,
-    spawnTokenBalance: 0,
-    streakDays: 0,
-    lastCheckIn: null,
-  });
-  const [inventory, setInventory] = useState([]);
-  const [supCastFeed, setSupCastFeed] = useState([]);
+interface LeaderRow {
+  id: string;
+  handle: string;
+  xp: number;
+  trophies: number;
+  rank: number;
+  type: 'xp' | 'packs' | 'trader';
+}
 
-  // SupCast form
+interface ActivityRow {
+  id: string;
+  label: string;
+  value: string;
+  note?: string;
+}
+
+const App: React.FC = () => {
+  const [activeTab, setActiveTab] = useState<MainTab>('home');
+
+  // XP / gamification
+  const [xp, setXp] = useState<number>(420);
+  const [streakDays, setStreakDays] = useState<number>(3);
+  const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
+  const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
+
+  const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
+  const xpInLevel = useMemo(() => xp % 200, [xp]);
+  const xpToNext = 200 - xpInLevel;
+
+  // Holo theme helpers
+  const neon = 'text-[#00FFC0]';
+  const accentBlue = 'text-[#7dd3fc]';
+  const cardBg = 'bg-[#050509]';
+  const borderColor = 'border border-[#1b1f2b]';
+
+  // SupCast state
+  const [newCaseCategory, setNewCaseCategory] = useState<SupCastCategory>('tokens');
   const [newCaseTitle, setNewCaseTitle] = useState('');
   const [newCaseDesc, setNewCaseDesc] = useState('');
   const [isPostingCase, setIsPostingCase] = useState(false);
-  const [newCaseCategory, setNewCaseCategory] =
-    useState('tokens'); // tokens | packs | infra | frames | ux
-  const [aiSuggestion, setAiSuggestion] = useState(null);
+  const [aiSuggestion, setAiSuggestion] = useState<string | null>(null);
+  const [supCastFeed, setSupCastFeed] = useState<SupCastCase[]>([
+    {
+      id: '1',
+      title: 'Best route: mainnet → Base for small mints?',
+      description: 'Under $50, which bridge keeps gas/fees lowest for Zora coins?',
+      status: 'Open',
+      posterHandle: '@mesh-user',
+      posterId: '0x1234abcd',
+      category: 'infra',
+    },
+    {
+      id: '2',
+      title: 'Why is my Zora coin not showing in Base app?',
+      description: 'Minted via frame, wallet sees it, but Base app feed stays empty.',
+      status: 'Claimed',
+      posterHandle: '@spawniz',
+      posterId: '0xfeedcafe',
+      category: 'frames',
+    },
+  ]);
 
-  // SupCast local chat (demo)
-  const [chatMessages, setChatMessages] = useState([
+  // SupCast local chat
+  const [chatMessages, setChatMessages] = useState<MeshChatMessage[]>([
     {
       id: 1,
       user: 'Mesh bot',
@@ -104,1508 +124,1038 @@ const App = () => {
   ]);
   const [newChatMessage, setNewChatMessage] = useState('');
 
-  // --- TOAST ---
-  const showToast = useCallback((message, type = 'info') => {
-    let color = 'bg-[#00FFC0]/90';
-    if (type === 'error') color = 'bg-red-600/90';
-    if (type === 'info') color = 'bg-[#00A6FF]/90';
+  // Loot / jackpot
+  const [jackpotPot, setJackpotPot] = useState<number>(128.4); // USDC mock
+  const [lastJackpotResult, setLastJackpotResult] = useState<string>('No spin yet');
 
-    setToast({ message, color });
-    setTimeout(() => setToast(null), 3000);
+  // Leaderboard
+  const [leaderFilter, setLeaderFilter] = useState<'xp' | 'packs' | 'trader'>('xp');
+  const leaders: LeaderRow[] = useMemo(
+    () => [
+      { id: '1', handle: '@spawniz', xp: 4200, trophies: 7, rank: 1, type: 'xp' },
+      { id: '2', handle: '@mesh-whale', xp: 3200, trophies: 6, rank: 2, type: 'xp' },
+      { id: '3', handle: '@vibe-hunter', xp: 2850, trophies: 4, rank: 3, type: 'xp' },
+      { id: '4', handle: '@tiny-maxi', xp: 2600, trophies: 5, rank: 4, type: 'packs' },
+      { id: '5', handle: '@sniper.eth', xp: 2500, trophies: 3, rank: 5, type: 'trader' },
+    ],
+    []
+  );
+
+  const filteredLeaders = useMemo(
+    () => leaders.filter((l) => l.type === leaderFilter).sort((a, b) => a.rank - b.rank),
+    [leaders, leaderFilter]
+  );
+
+  // Activity rows (dashboard)
+  const activityRows: ActivityRow[] = useMemo(
+    () => [
+      { id: 'a1', label: 'Last action', value: 'Minted Tiny Legend pack', note: 'via Vibe on Base' },
+      { id: 'a2', label: 'Gas 24h', value: '$4.12', note: 'mock · Base only' },
+      { id: 'a3', label: 'Packs opened', value: '37', note: 'last 7 days' },
+      { id: 'a4', label: 'Creator coins', value: '12', note: 'Zora / frames' },
+    ],
+    []
+  );
+
+  // Helpers
+  const showToast = useCallback((msg: string) => {
+    // ultra-simple, no DOM hacking
+    console.log('[TOAST]', msg);
   }, []);
 
-  const ToastComponent = () =>
-    toast && (
-      <div className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[100] w-full max-w-xs transition-all duration-300">
-        <div
-          className={`p-3 rounded-xl shadow-2xl text-sm font-semibold text-gray-900 backdrop-blur-sm ${toast.color}`}
-        >
-          {toast.message}
-        </div>
+  const addXP = useCallback(
+    (amount: number) => {
+      setXp((prev) => prev + amount);
+      showToast(`+${amount} XP`);
+    },
+    [showToast]
+  );
+
+  const addTrophy = useCallback(
+    (label: string) => {
+      if (!trophies.includes(label)) {
+        setTrophies((prev) => [...prev, label]);
+        setSpawnRep((prev) => Math.min(100, prev + 2));
+        showToast(`Trophy unlocked: ${label}`);
+      }
+    },
+    [trophies, showToast]
+  );
+
+  // HoloCard component
+  const HoloCard: React.FC<{ className?: string; children: React.ReactNode }> = ({
+    className = '',
+    children,
+  }) => (
+    <div
+      className={`relative rounded-2xl p-[1px] bg-gradient-to-br from-[#00FFC0] via-[#7dd3fc] to-[#a855f7] shadow-[0_0_24px_rgba(0,0,0,0.7)]`}
+    >
+      <div
+        className={`${cardBg} ${borderColor} rounded-2xl h-full w-full p-3 sm:p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_rgba(0,255,192,0.25)] hover:rotate-[0.25deg] ${className}`}
+      >
+        <div className="pointer-events-none absolute inset-0 opacity-20 mix-blend-screen bg-[radial-gradient(circle_at_0_0,#22d3ee,transparent_60%),radial-gradient(circle_at_100%_100%,#a855f7,transparent_60%)]" />
+        <div className="relative z-10">{children}</div>
       </div>
-    );
-
-  // --- STYLE SHORTCUTS ---
-  const neon = 'text-[#00FFC0]';
-  const neonBg = 'bg-[#00FFC0]';
-  const accentBlue = 'text-[#00A6FF]';
-  const darkBg = 'bg-[#0A0A10]';
-  const cardBg = 'bg-[#151520]';
-  const borderColor = 'border-[#252535]';
-
-  const hasFirebaseConfig =
-    firebaseConfig && typeof firebaseConfig.apiKey === 'string';
-
-  // --- FIREBASE INIT / AUTH ---
-  useEffect(() => {
-    // Ingen Firebase-config → kör i local/mock mode
-    if (!hasFirebaseConfig) {
-      console.warn(
-        'No Firebase config detected → running in local mode (no backend).'
-      );
-      setIsAuthReady(true);
-      setIsLoading(false);
-      return;
-    }
-
-    try {
-      const app = initializeApp(firebaseConfig);
-      const authInstance = getAuth(app);
-      const firestoreInstance = getFirestore(app);
-      setDb(firestoreInstance);
-      setAuth(authInstance);
-
-      const unsubscribe = onAuthStateChanged(
-        authInstance,
-        async (user) => {
-          if (user) {
-            setUserId(user.uid);
-            setIsAuthReady(true);
-          } else {
-            try {
-              if (initialAuthToken) {
-                await signInWithCustomToken(
-                  authInstance,
-                  initialAuthToken
-                );
-              } else {
-                await signInAnonymously(authInstance);
-              }
-            } catch (e) {
-              console.error('Auth failed:', e);
-              showToast(
-                'Authentication failed. Running in local mode.',
-                'error'
-              );
-              setIsAuthReady(true);
-            }
-          }
-        }
-      );
-
-      return () => unsubscribe();
-    } catch (e) {
-      console.error('Firebase Initialization Error:', e);
-      showToast('Backend init failed. Local mode active.', 'error');
-      setIsAuthReady(true);
-      setIsLoading(false);
-    }
-  }, [showToast, hasFirebaseConfig]);
-
-  // --- FIRESTORE LISTENERS ---
-  useEffect(() => {
-    // Local/mock mode → ingen Firestore, ingen loading-spinner
-    if (!hasFirebaseConfig) {
-      setIsLoading(false);
-      return;
-    }
-
-    if (!isAuthReady || !userId || !db) return;
-    setIsLoading(true);
-
-    // PROFILE
-    const profileRef = doc(db, getUserProfilePath(userId));
-    const unsubProfile = onSnapshot(
-      profileRef,
-      (docSnap) => {
-        if (docSnap.exists()) {
-          const data = docSnap.data();
-          setProfileData((prev) => ({
-            ...prev,
-            xpBalance: data.xpBalance || 0,
-            spawnTokenBalance: data.spawnTokenBalance || 0,
-            streakDays: data.streakDays || 0,
-            lastCheckIn:
-              data.lastCheckIn instanceof Timestamp
-                ? data.lastCheckIn.toDate()
-                : null,
-          }));
-        } else {
-          const initialData = {
-            xpBalance: 100,
-            spawnTokenBalance: 5,
-            streakDays: 1,
-            lastCheckIn: Timestamp.now(),
-          };
-          setDoc(profileRef, initialData).then(() => {
-            setProfileData({
-              ...initialData,
-              lastCheckIn: new Date(),
-            });
-            showToast(
-              'Welcome to SpawnEngine! Initial XP/SPN credited.',
-              'success'
-            );
-          });
-        }
-        setIsLoading(false);
-      },
-      (err) => {
-        console.error('Profile Snapshot Error:', err);
-        showToast('Error loading profile data.', 'error');
-        setIsLoading(false);
-      }
-    );
-
-    // INVENTORY
-    const invCol = collection(db, getUserInventoryPath(userId));
-    const unsubInv = onSnapshot(
-      invCol,
-      (snapshot) => {
-        const newInventory = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        setInventory(newInventory);
-      },
-      (err) => {
-        console.error('Inventory Snapshot Error:', err);
-        showToast('Error loading inventory.', 'error');
-      }
-    );
-
-    // SUPCAST FEED (public)
-    const supCol = collection(db, getPublicSupCastCollectionPath());
-    const unsubSup = onSnapshot(
-      supCol,
-      (snapshot) => {
-        const feed = snapshot.docs.map((d) => ({
-          id: d.id,
-          ...d.data(),
-        }));
-        feed.sort(
-          (a, b) =>
-            (b.timestamp?.toDate?.() || 0) -
-            (a.timestamp?.toDate?.() || 0)
-        );
-        setSupCastFeed(feed.slice(0, 50));
-      },
-      (err) => {
-        console.error('SupCast Snapshot Error:', err);
-        showToast('Error loading SupCast feed.', 'error');
-      }
-    );
-
-    return () => {
-      unsubProfile();
-      unsubInv();
-      unsubSup();
-    };
-  }, [isAuthReady, userId, db, showToast, hasFirebaseConfig]);
-
-  // --- CHECK-IN ---
-  const handleCheckIn = useCallback(
-    async () => {
-      // Local mode: bump lite lokalt så appen känns levande
-      if (!db || !userId) {
-        setProfileData((prev) => ({
-          ...prev,
-          streakDays: prev.streakDays + 1,
-          xpBalance: prev.xpBalance + 50,
-          lastCheckIn: new Date(),
-        }));
-        showToast('Local check-in (mock). +50 XP.', 'success');
-        return;
-      }
-
-      const profileRef = doc(db, getUserProfilePath(userId));
-      const now = new Date();
-      const last = profileData.lastCheckIn;
-
-      const ready =
-        !last ||
-        now.getTime() - last.getTime() >= 24 * 60 * 60 * 1000;
-
-      if (!ready) {
-        const timeRemainingMs =
-          last.getTime() +
-          24 * 60 * 60 * 1000 -
-          now.getTime();
-        const hours = Math.floor(
-          timeRemainingMs / (1000 * 60 * 60)
-        );
-        const minutes = Math.floor(
-          (timeRemainingMs % (1000 * 60 * 60)) / (1000 * 60)
-        );
-        return showToast(
-          `Next check-in in ${hours}h ${minutes}m.`,
-          'info'
-        );
-      }
-
-      try {
-        await runTransaction(db, async (tx) => {
-          const profileDoc = await tx.get(profileRef);
-          if (!profileDoc.exists())
-            throw new Error('Profile does not exist');
-
-          const data = profileDoc.data();
-          let newStreak = data.streakDays || 0;
-          let newXp = data.xpBalance || 0;
-          const reward = 50 + newStreak * 5;
-
-          const isStreakContinued =
-            !last ||
-            now.getTime() - last.getTime() <
-              48 * 60 * 60 * 1000;
-
-          if (isStreakContinued) {
-            newStreak += 1;
-          } else {
-            newStreak = 1;
-            showToast('Streak lost, reset to Day 1.', 'error');
-          }
-
-          newXp += reward;
-
-          tx.update(profileRef, {
-            streakDays: newStreak,
-            xpBalance: newXp,
-            lastCheckIn: Timestamp.now(),
-          });
-
-          showToast(
-            `Day ${newStreak} Check-in successful! +${reward} XP.`,
-            'success'
-          );
-        });
-      } catch (e) {
-        console.error('Check-in failed:', e);
-        showToast('Check-in failed. Please try again.', 'error');
-      }
-    },
-    [db, userId, profileData.lastCheckIn, showToast]
+    </div>
   );
 
-  // --- PACK OPEN ---
-  const handlePackOpen = useCallback(
-    async (packId) => {
-      // Local/mock: bara kör fake rewards
-      if (!db || !userId) {
-        const r = Math.random();
-        let rewardText = '';
-        if (r < 0.05) {
-          rewardText = 'MYTHIC DROP! (local mock)';
-        } else if (r < 0.25) {
-          rewardText = '+1 Shard (local mock)';
-        } else {
-          rewardText = '+2–3 Fragments (local mock)';
-        }
-        showToast(rewardText, 'success');
-        return;
-      }
-
-      try {
-        await runTransaction(db, async (tx) => {
-          const packRef = doc(
-            db,
-            getUserInventoryPath(userId),
-            packId
-          );
-          const profileRef = doc(
-            db,
-            getUserProfilePath(userId)
-          );
-
-          const packDoc = await tx.get(packRef);
-          const profileDoc = await tx.get(profileRef);
-
-          if (!packDoc.exists() || packDoc.data().count <= 0)
-            throw new Error('Pack not found or count zero');
-          if (!profileDoc.exists())
-            throw new Error('Profile not found');
-
-          const currentPacks = packDoc.data().count;
-          const currentXP = profileDoc.data().xpBalance || 0;
-
-          const r = Math.random();
-          let rewardText = '';
-          let xpReward = 0;
-          let itemType = null;
-          let itemAmount = 0;
-
-          if (r < 0.05) {
-            itemType = 'Relic';
-            itemAmount = 1;
-            xpReward = 500;
-            rewardText = 'MYTHIC DROP! +1 Relic & 500 XP.';
-          } else if (r < 0.25) {
-            itemType = 'Shard';
-            itemAmount = 1;
-            xpReward = 100;
-            rewardText = '+1 Shard & 100 XP.';
-          } else {
-            itemType = 'Fragment';
-            itemAmount = Math.floor(Math.random() * 3) + 1;
-            xpReward = 25;
-            rewardText = `+${itemAmount} Fragments & 25 XP.`;
-          }
-
-          tx.update(packRef, { count: currentPacks - 1 });
-          tx.update(profileRef, {
-            xpBalance: currentXP + xpReward,
-          });
-
-          const itemRef = doc(
-            db,
-            getUserInventoryPath(userId),
-            itemType.toLowerCase()
-          );
-          const itemDoc = await tx.get(itemRef);
-          const currentItemCount = itemDoc.exists()
-            ? itemDoc.data().count
-            : 0;
-
-          tx.set(
-            itemRef,
-            {
-              type: itemType,
-              count: currentItemCount + itemAmount,
-              lastAcquired: Timestamp.now(),
-            },
-            { merge: true }
-          );
-
-          showToast(rewardText, 'success');
-        });
-      } catch (e) {
-        console.error('Open pack failed:', e);
-        showToast(`Open failed: ${e.message}`, 'error');
-      }
-    },
-    [db, userId, showToast]
-  );
-
-  // --- ACTION: POST SUPCAST CASE ---
-  const handlePostCase = useCallback(
-    async () => {
-      if (!newCaseTitle || !newCaseDesc)
-        return showToast(
-          'Title and description required.',
-          'error'
-        );
-
-      // Mock mode
-      if (!db || !userId) {
-        const localCase = {
-          id: `local-${Date.now()}`,
-          title: newCaseTitle,
-          description: newCaseDesc,
-          status: 'Open',
-          posterId: 'local',
-          expertId: null,
-          timestamp: { toDate: () => new Date() },
-          posterHandle: '@local-mesh',
-          category: newCaseCategory,
-        };
-        setSupCastFeed((prev) => [localCase, ...prev]);
-        setNewCaseTitle('');
-        setNewCaseDesc('');
-        setNewCaseCategory('tokens');
-        return showToast(
-          'Question added (local mock).',
-          'success'
-        );
-      }
-
-      setIsPostingCase(true);
-      try {
-        const supCol = collection(
-          db,
-          getPublicSupCastCollectionPath()
-        );
-        const newCase = {
-          title: newCaseTitle,
-          description: newCaseDesc,
-          status: 'Open',
-          posterId: userId,
-          expertId: null,
-          timestamp: Timestamp.now(),
-          posterHandle: '@spawniz',
-          category: newCaseCategory,
-        };
-        await addDoc(supCol, newCase);
-        setNewCaseTitle('');
-        setNewCaseDesc('');
-        setNewCaseCategory('tokens');
-        showToast(
-          'Question posted to SupCast network!',
-          'success'
-        );
-      } catch (e) {
-        console.error('Post case failed:', e);
-        showToast(
-          'Failed to post case. Check network.',
-          'error'
-        );
-      } finally {
-        setIsPostingCase(false);
-      }
-    },
-    [
-      db,
-      userId,
-      newCaseTitle,
-      newCaseDesc,
-      newCaseCategory,
-      showToast,
-    ]
-  );
-
-  // --- STREAK HELPERS ---
-  const formatTimeRemaining = (lastCheckIn) => {
-    if (!lastCheckIn) return 'Ready Now';
-    const next =
-      lastCheckIn.getTime() + 24 * 60 * 60 * 1000;
-    const ms = next - Date.now();
-    if (ms <= 0) return 'Ready Now';
-    const h = Math.floor(ms / (1000 * 60 * 60));
-    const m = Math.floor(
-      (ms % (1000 * 60 * 60)) / (1000 * 60)
-    );
-    return `${h}h ${m}m`;
+  // SupCast helpers
+  const categoryLabel = (cat: SupCastCategory | string | undefined) => {
+    switch (cat) {
+      case 'tokens':
+        return 'Tokens & markets';
+      case 'packs':
+        return 'Packs & odds';
+      case 'infra':
+        return 'Infra / gas / RPC';
+      case 'frames':
+        return 'Frames & miniapps';
+      case 'ux':
+        return 'UX / flows';
+      default:
+        return 'Other';
+    }
   };
 
-  const streakReady = useMemo(() => {
-    if (!profileData.lastCheckIn) return true;
-    return (
-      Date.now() - profileData.lastCheckIn.getTime() >=
-      24 * 60 * 60 * 1000
-    );
-  }, [profileData.lastCheckIn]);
+  const handlePostCase = useCallback(() => {
+    if (!newCaseTitle.trim() || !newCaseDesc.trim()) return;
+    setIsPostingCase(true);
+    const newCase: SupCastCase = {
+      id: `local-${Date.now()}`,
+      title: newCaseTitle.trim(),
+      description: newCaseDesc.trim(),
+      status: 'Open',
+      posterHandle: '@spawniz',
+      posterId: '0xspawn',
+      category: newCaseCategory,
+    };
+    setSupCastFeed((prev) => [newCase, ...prev]);
+    setNewCaseTitle('');
+    setNewCaseDesc('');
+    setNewCaseCategory('tokens');
+    setIsPostingCase(false);
+    addXP(8);
+  }, [newCaseTitle, newCaseDesc, newCaseCategory, addXP]);
 
-  const streakHoursLeft = useMemo(() => {
-    if (!profileData.lastCheckIn) return 0;
-    const next =
-      profileData.lastCheckIn.getTime() +
-      24 * 60 * 60 * 1000;
-    const ms = next - Date.now();
-    if (ms <= 0) return 0;
-    return 24 - ms / (1000 * 60 * 60);
-  }, [profileData.lastCheckIn]);
+  const handleGenerateSuggestion = useCallback(() => {
+    const latest = supCastFeed[0];
+    const baseTopic = latest
+      ? latest.title.toLowerCase()
+      : 'base wallet routing between Zora, Vibe and Farcaster frames';
 
-  // --- TABS ---
-
-  const HomeTab = () => {
-    const timeRemainingText = formatTimeRemaining(
-      profileData.lastCheckIn
-    );
-    const progressPercent = Math.min(
-      100,
-      (streakHoursLeft / 24) * 100
-    );
-
-    const oracleFeed = [
-      {
-        type: 'alpha',
-        message:
-          "Alpha Signal: Whale '0xab...c78' purchased 3 Launchpad Packs. Unusual activity.",
-        icon: (
-          <ShieldCheck
-            className={`w-4 h-4 ${neon}`}
-          />
-        ),
-      },
-      {
-        type: 'gravity',
-        message:
-          'Gravity Shift: Creator Y cluster has +200% XP flow. Hype cycle initiating.',
-        icon: (
-          <TrendingUp className="w-4 h-4 text-yellow-400" />
-        ),
-      },
-      {
-        type: 'burn',
-        message:
-          "Burn Event: High-volume wallet '0xde...f12' burned 50% of Creator Z tokens.",
-        icon: (
-          <Flame className="w-4 h-4 text-red-500" />
-        ),
-      },
-      {
-        type: 'quest',
-        message:
-          'Quest: New IRL Quest available: Check-in at ETH London Meetup!',
-        icon: (
-          <MapPin className="w-4 h-4 text-blue-400" />
-        ),
-      },
+    const suggestions = [
+      `Isometric Base control room tracking ${baseTopic} in holo HUD style`,
+      `Neon-black dashboard visualizing ${baseTopic} like a game lobby UI`,
+      `Minimal creator terminal for ${baseTopic}, dark OS-style interface`,
+      `3D orbit map of wallets involved in ${baseTopic} on Base`,
+      `XP quest screen gamifying ${baseTopic} across creator tokens`,
     ];
+    const choice = suggestions[Math.floor(Math.random() * suggestions.length)];
+    setAiSuggestion(choice);
+    addXP(3);
+  }, [supCastFeed, addXP]);
 
-    return (
-      <div className="space-y-6">
-        {/* XP / SPN */}
-        <div className="grid grid-cols-2 gap-3">
-          <div
-            className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center shadow-lg transition duration-200 hover:scale-[1.02]`}
-          >
-            <p className="text-xs text-gray-400 uppercase tracking-wider">
-              XP BALANCE
-            </p>
-            <p
-              className={`text-4xl font-extrabold mt-1 ${neon}`}
-            >
-              {profileData.xpBalance.toLocaleString()}
-            </p>
-          </div>
-          <div
-            className={`${cardBg} ${borderColor} border p-4 rounded-xl text-center shadow-lg transition duration-200 hover:scale-[1.02]`}
-          >
-            <p className="text-xs text-gray-400 uppercase tracking-wider">
-              SPAWN TOKEN
-            </p>
-            <p
-              className={`text-4xl font-extrabold mt-1 ${accentBlue}`}
-            >
-              {profileData.spawnTokenBalance.toFixed(2)}
-            </p>
-          </div>
-        </div>
+  const handleSendChat = useCallback(() => {
+    const text = newChatMessage.trim();
+    if (!text) return;
 
-        {/* Streak */}
-        <div
-          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
-        >
-          <div className="flex justify-between items-center">
-            <h3 className="text-lg font-bold text-white">
-              Daily Streak: {profileData.streakDays} Days
-            </h3>
-            <button
-              onClick={handleCheckIn}
-              disabled={!streakReady}
-              className={`px-4 py-2 rounded-full font-bold text-sm shadow-md transition ${
-                streakReady
-                  ? 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
-              }`}
-            >
-              {streakReady ? 'Check In Now' : 'Check In'}
-            </button>
-          </div>
-          <p className="text-xs text-gray-400">
-            Next check-in in:{' '}
-            <span className="font-mono text-white">
-              {timeRemainingText}
-            </span>
+    const msg: MeshChatMessage = {
+      id: Date.now(),
+      user: '@you',
+      kind: 'user',
+      text,
+      ts: new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' }),
+    };
+
+    setChatMessages((prev) => [...prev, msg]);
+    setNewChatMessage('');
+    addXP(2);
+    setSpawnRep((prev) => Math.min(100, prev + 1));
+  }, [newChatMessage, addXP]);
+
+  // Loot / jackpot spin
+  const handleSpinJackpot = useCallback(() => {
+    const roll = Math.random();
+    let result: string;
+
+    if (roll > 0.985) {
+      result = 'JACKPOT HIT 💎 +500 XP + Trophy';
+      addXP(500);
+      addTrophy('Daily Jackpot');
+      setJackpotPot((prev) => prev * 0.7);
+    } else if (roll > 0.9) {
+      result = '+50 XP & small pot share';
+      addXP(50);
+      setJackpotPot((prev) => prev * 0.96);
+    } else if (roll > 0.6) {
+      result = '+10 XP';
+      addXP(10);
+    } else {
+      result = 'No win – pot grows';
+      setJackpotPot((prev) => prev + 5);
+    }
+
+    setLastJackpotResult(result);
+  }, [addXP, addTrophy]);
+
+  // Tabs
+  const TabButton: React.FC<{ id: MainTab; icon: React.ReactNode; label: string }> = ({
+    id,
+    icon,
+    label,
+  }) => (
+    <button
+      onClick={() => setActiveTab(id)}
+      className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs sm:text-sm font-medium transition ${
+        activeTab === id
+          ? 'bg-[#0f172a] text-white shadow-[0_0_16px_rgba(0,255,192,0.22)]'
+          : 'text-gray-400 hover:bg-[#020617]'
+      }`}
+    >
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+
+  // Views
+  const HomeTab = () => (
+    <div className="space-y-4">
+      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
+        <div>
+          <h1 className="text-lg sm:text-xl font-semibold text-white tracking-wide">
+            SpawnEngine · <span className={neon}>Onchain Home Base</span>
+          </h1>
+          <p className="text-[11px] sm:text-xs text-gray-400 mt-1 max-w-xl">
+            One HUD for Base: creator tokens, packs, quests, XP, SupCast, trading & mesh automations.
           </p>
-          <div className="w-full bg-gray-800 rounded-full h-2">
-            <div
-              className={`h-2 rounded-full ${neonBg} transition-all duration-1000`}
-              style={{ width: `${progressPercent}%` }}
-            ></div>
-          </div>
-          <button className="w-full text-xs text-center text-red-400/80 hover:text-red-300 pt-1">
-            <ShieldCheck className="w-3 h-3 inline-block mr-1" />
-            Buy Streak Insurance (Pillar 3)
-          </button>
         </div>
+        <div className="flex items-center gap-3 text-xs">
+          <div className="px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] flex items-center gap-1.5">
+            <Globe className="w-3.5 h-3.5 text-[#00FFC0]" />
+            <span className="text-gray-300">Base mainnet</span>
+          </div>
+          <div className="px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] flex items-center gap-1.5">
+            <Zap className="w-3.5 h-3.5 text-yellow-300" />
+            <span className="text-gray-300">Mesh streak {streakDays}d</span>
+          </div>
+        </div>
+      </div>
 
-        {/* Oracle feed */}
-        <div className="space-y-3">
-          <h3
-            className={`text-xl font-bold ${accentBlue} tracking-wider`}
-          >
-            Oracle Feed{' '}
-            <span className="text-sm font-light text-gray-500">
-              (Pillar 8)
-            </span>
-          </h3>
-          <div className="space-y-2">
-            {oracleFeed.map((item, i) => (
+      {/* XP strip */}
+      <HoloCard className="overflow-hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <p className="text-xs text-gray-400 uppercase tracking-wide">Account status</p>
+            <p className="text-sm sm:text-base text-white font-semibold mt-0.5">
+              Level {level} · <span className={neon}>{xp} XP</span> · Rep {spawnRep}/100
+            </p>
+            <p className="text-[11px] text-gray-400 mt-1">
+              {xpToNext} XP to next rank · quests, packs, SupCast & streaks all count.
+            </p>
+          </div>
+          <div className="w-full sm:w-56">
+            <div className="h-2.5 w-full rounded-full bg-[#020617] overflow-hidden border border-[#1f2937]">
               <div
-                key={i}
-                className="flex items-start space-x-3 p-3 bg-gray-900 rounded-xl border border-gray-800 shadow-md"
-              >
-                <div className="flex-shrink-0 mt-0.5">
-                  {item.icon}
-                </div>
-                <span className="text-sm text-gray-200">
-                  {item.message}
-                </span>
+                className="h-full bg-gradient-to-r from-[#00FFC0] via-[#22d3ee] to-[#a855f7]"
+                style={{ width: `${Math.min(100, (xpInLevel / 200) * 100)}%` }}
+              />
+            </div>
+            <p className="text-[10px] text-gray-500 mt-1 text-right">
+              {xpInLevel}/200 XP in level {level}
+            </p>
+          </div>
+        </div>
+      </HoloCard>
+
+      {/* Grid: dashboard + market */}
+      <div className="grid md:grid-cols-3 gap-3">
+        <div className="md:col-span-2 space-y-3">
+          <HoloCard>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <ActivityIcon className="w-4 h-4 text-[#00FFC0]" />
+                <h2 className="text-xs font-semibold text-white uppercase tracking-wide">
+                  Mesh HUD · wallet pulse
+                </h2>
               </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    );
-  };
-
-  const LootTab = () => {
-    const getItemCount = (type) => {
-      const item = inventory.find(
-        (i) => i.id === type.toLowerCase()
-      );
-      return item ? item.count : 0;
-    };
-
-    const starterPack =
-      inventory.find(
-        (i) => i.id === 'startermeshpack'
-      ) || {
-        id: 'startermeshpack',
-        count: 1,
-        type: 'Starter Mesh Pack',
-      };
-
-    const fragments = getItemCount('Fragment');
-    const shards = getItemCount('Shard');
-    const relics = getItemCount('Relic');
-
-    const handleSynthesis = async () => {
-      // Local mode
-      if (!db || !userId) {
-        if (fragments < 3)
-          return showToast(
-            'Not enough Fragments (3 needed).',
-            'error'
-          );
-        setInventory((prev) => {
-          const copy = [...prev];
-          const fragIdx = copy.findIndex(
-            (i) => i.id === 'fragment'
-          );
-          const shardIdx = copy.findIndex(
-            (i) => i.id === 'shard'
-          );
-          if (fragIdx >= 0)
-            copy[fragIdx] = {
-              ...copy[fragIdx],
-              count: copy[fragIdx].count - 3,
-            };
-          if (shardIdx >= 0)
-            copy[shardIdx] = {
-              ...copy[shardIdx],
-              count: copy[shardIdx].count + 1,
-            };
-          else
-            copy.push({
-              id: 'shard',
-              type: 'Shard',
-              count: 1,
-            });
-          return copy;
-        });
-        return showToast(
-          'Synthesis successful! (local mock) 3 Fragments → 1 Shard.',
-          'success'
-        );
-      }
-
-      if (fragments < 3)
-        return showToast(
-          'Not enough Fragments (3 needed).',
-          'error'
-        );
-
-      try {
-        await runTransaction(db, async (tx) => {
-          const fragRef = doc(
-            db,
-            getUserInventoryPath(userId),
-            'fragment'
-          );
-          const shardRef = doc(
-            db,
-            getUserInventoryPath(userId),
-            'shard'
-          );
-
-          tx.update(fragRef, { count: fragments - 3 });
-          const shardDoc = await tx.get(shardRef);
-          const currentShardCount = shardDoc.exists()
-            ? shardDoc.data().count
-            : 0;
-
-          tx.set(
-            shardRef,
-            {
-              type: 'Shard',
-              count: currentShardCount + 1,
-              lastAcquired: Timestamp.now(),
-            },
-            { merge: true }
-          );
-
-          showToast(
-            'Synthesis successful! 3 Fragments → 1 Shard.',
-            'success'
-          );
-        });
-      } catch (e) {
-        console.error('Synthesis failed:', e);
-        showToast(
-          'Synthesis failed. Please try again.',
-          'error'
-        );
-      }
-    };
-
-    const handleEnterJackpot = () => {
-      showToast(
-        'Entered daily jackpot (mock). Onchain version hooks into Base later.',
-        'success'
-      );
-    };
-
-    return (
-      <div className="space-y-6">
-        {/* Sub-tabs top row (mock) */}
-        <div className="flex justify-around bg-gray-900 p-1 rounded-xl border border-gray-700/50 shadow-inner text-xs">
-          <button className="w-1/3 py-2 rounded-lg bg-[#00FFC0]/10 text-[#00FFC0] font-semibold">
-            Packs
-          </button>
-          <button className="w-1/3 py-2 rounded-lg text-gray-400 hover:bg-gray-800">
-            Pull Lab
-          </button>
-          <button className="w-1/3 py-2 rounded-lg text-gray-400 hover:bg-gray-800">
-            Inventory
-          </button>
-        </div>
-
-        {/* Starter pack */}
-        <div
-          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
-        >
-          <div className="flex justify-between items-start">
-            <h3 className="text-lg font-bold text-white">
-              Starter Mesh Pack
-            </h3>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-gray-700 text-white">
-              ID: S001
-            </span>
-          </div>
-          <p className="text-sm text-gray-400">
-            A base pack with guaranteed Fragments and a chance
-            for Shards. (Pillar 2)
-          </p>
-          <div className="flex justify-between items-center pt-2 border-t border-gray-800">
-            <span
-              className={`text-2xl font-extrabold ${neon}`}
-            >
-              {starterPack.count} available
-            </span>
-            <button
-              onClick={() => handlePackOpen(starterPack.id)}
-              disabled={starterPack.count <= 0}
-              className={`px-4 py-2 rounded-lg font-bold text-sm transition ${
-                starterPack.count > 0
-                  ? 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]/60 hover:bg-[#00FFC0]/40'
-                  : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
-              }`}
-            >
-              Simulate Open
-            </button>
-          </div>
-        </div>
-
-        {/* Pull Lab */}
-        <div
-          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-4 shadow-lg`}
-        >
-          <h3 className={`text-lg font-bold ${accentBlue}`}>
-            Pull Lab (Synthesis)
-          </h3>
-          <p className="text-sm text-gray-400">
-            Combine Fragments to synthesize rare Relics (Pillar
-            2).
-          </p>
-
-          <div className="grid grid-cols-3 text-center text-sm pt-2 border-t border-gray-800/50">
-            <div className="p-2 border-r border-gray-800">
-              <p className="text-3xl font-bold text-white">
-                {fragments}
-              </p>
-              <p className="text-xs text-gray-400">
-                Fragments
-              </p>
+              <span className="text-[10px] text-gray-500">Mock data · live later</span>
             </div>
-            <div className="p-2 border-r border-gray-800">
-              <p
-                className={`text-3xl font-bold ${accentBlue}`}
-              >
-                {shards}
-              </p>
-              <p className="text-xs text-gray-400">Shards</p>
-            </div>
-            <div className="p-2">
-              <p className="text-3xl font-bold text-red-400">
-                {relics}
-              </p>
-              <p className="text-xs text-gray-400">Relics</p>
-            </div>
-          </div>
-
-          <button
-            onClick={handleSynthesis}
-            disabled={fragments < 3}
-            className={`w-full px-4 py-2 rounded-lg font-bold text-sm transition ${
-              fragments >= 3
-                ? 'bg-blue-600/30 text-blue-400 border border-blue-600 hover:bg-blue-600/50'
-                : 'bg-gray-700/50 text-gray-400 border border-gray-600 cursor-not-allowed'
-            }`}
-          >
-            Run Synthesis (3 Fragments → 1 Shard)
-          </button>
-        </div>
-
-        {/* Daily Jackpot */}
-        <div
-          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
-        >
-          <div className="flex items-center justify-between">
-            <div>
-              <h3 className="text-lg font-bold text-white flex items-center">
-                <Gift className="w-4 h-4 mr-2 text-yellow-400" />
-                Daily Jackpot · Mesh Pot
-              </h3>
-              <p className="text-xs text-gray-400 mt-1">
-                Cheap entry in USDC or ETH on Base later. Right
-                now: mock entry for UX.
-              </p>
-            </div>
-            <span className="text-xs font-mono px-2 py-0.5 rounded-full bg-gray-800 text-gray-300 border border-gray-700">
-              v0.1 mock
-            </span>
-          </div>
-          <div className="flex justify-between items-center mt-2 text-sm">
-            <div>
-              <p className="text-gray-400 text-xs">
-                Est. pool (mock)
-              </p>
-              <p className="text-xl font-bold text-green-400">
-                123.45 ETH
-              </p>
-            </div>
-            <div className="text-right">
-              <p className="text-gray-400 text-xs">
-                Entries today (mock)
-              </p>
-              <p className="text-xl font-bold text-[#00A6FF]">
-                3 842
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={handleEnterJackpot}
-            className="w-full mt-2 py-2 rounded-lg text-sm font-semibold bg-purple-600/40 text-purple-100 border border-purple-500 hover:bg-purple-600/60 transition"
-          >
-            Enter Daily Jackpot (0.001 ETH · mock UX)
-          </button>
-        </div>
-      </div>
-    );
-  };
-
-  const QuestsTab = () => {
-    const quests = [
-      {
-        type: 'Daily',
-        title: 'Daily Check-in (Completed)',
-        reward: 10,
-        status: 'Completed',
-      },
-      {
-        type: 'Daily',
-        title: 'Open 1 Pack',
-        reward: 25,
-        status: 'Claimable',
-      },
-      {
-        type: 'Weekly',
-        title: '5 Day Streak Run',
-        reward: 150,
-        status: 'Locked',
-      },
-      {
-        type: 'Weekly',
-        title: 'Solve 1 SupCast Case',
-        reward: 100,
-        status: 'Claimable',
-      },
-      {
-        type: 'IRL',
-        title: 'Base Builders Meetup (Stockholm)',
-        reward: 200,
-        status: 'Locked',
-      },
-    ];
-
-    const handleClaim = (title) => {
-      showToast(
-        `Reward for "${title}" claimed! +XP credited.`,
-        'success'
-      );
-    };
-
-    const getStatusStyle = (status) => {
-      switch (status) {
-        case 'Claimable':
-          return 'bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0]';
-        case 'Completed':
-          return 'bg-green-600/30 text-green-400 border border-green-600';
-        case 'Locked':
-        default:
-          return 'bg-gray-700/50 text-gray-400 border border-gray-600';
-      }
-    };
-
-    return (
-      <div className="space-y-6">
-        <h2 className={`text-2xl font-extrabold ${neon}`}>
-          Quests Platform
-        </h2>
-
-        <div className="space-y-3">
-          <h3 className={`text-lg font-bold ${accentBlue}`}>
-            Daily Goals
-          </h3>
-          {quests
-            .filter((q) => q.type === 'Daily')
-            .map((quest, i) => (
-              <div
-                key={i}
-                className={`${cardBg} ${borderColor} border p-3 rounded-xl flex justify-between items-center shadow-md`}
-              >
-                <div className="space-y-1">
-                  <p className="font-semibold text-white">
-                    {quest.title}
-                  </p>
-                  <p className="text-sm text-gray-400 flex items-center">
-                    <Star className="w-3 h-3 mr-1 text-yellow-400" />
-                    {quest.reward} XP Reward
-                  </p>
-                </div>
-                <button
-                  onClick={() =>
-                    quest.status === 'Claimable' &&
-                    handleClaim(quest.title)
-                  }
-                  disabled={quest.status !== 'Claimable'}
-                  className={`px-3 py-1 text-xs rounded-full font-semibold border transition ${getStatusStyle(
-                    quest.status
-                  )}`}
+            <div className="grid sm:grid-cols-2 gap-2 text-[11px]">
+              {activityRows.map((row) => (
+                <div
+                  key={row.id}
+                  className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]"
                 >
-                  {quest.status}
-                </button>
-              </div>
-            ))}
-        </div>
-
-        <div className="space-y-3">
-          <h3 className={`text-lg font-bold ${accentBlue}`}>
-            Weekly & IRL
-          </h3>
-          {quests
-            .filter((q) => q.type !== 'Daily')
-            .map((quest, i) => (
-              <div
-                key={i}
-                className={`${cardBg} ${borderColor} border p-3 rounded-xl flex justify-between items-center shadow-md`}
-              >
-                <div className="space-y-1">
-                  <p className="font-semibold text-white">
-                    {quest.title}
-                  </p>
-                  <p className="text-sm text-gray-400 flex items-center">
-                    <Star className="w-3 h-3 mr-1 text-yellow-400" />
-                    {quest.reward} XP Reward
-                  </p>
+                  <div>
+                    <p className="text-gray-300">{row.label}</p>
+                    {row.note && <p className="text-[10px] text-gray-500">{row.note}</p>}
+                  </div>
+                  <span className={neon}>{row.value}</span>
                 </div>
-                <button
-                  onClick={() =>
-                    quest.status === 'Claimable' &&
-                    handleClaim(quest.title)
-                  }
-                  disabled={quest.status !== 'Claimable'}
-                  className={`px-3 py-1 text-xs rounded-full font-semibold border transition ${getStatusStyle(
-                    quest.status
-                  )}`}
-                >
-                  {quest.status}
-                </button>
+              ))}
+            </div>
+          </HoloCard>
+
+          <HoloCard>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <Box className="w-4 h-4 text-[#a855f7]" />
+                <h2 className="text-xs font-semibold text-white uppercase tracking-wide">
+                  Creator tokens & packs
+                </h2>
               </div>
-            ))}
-        </div>
-      </div>
-    );
-  };
-
-  const MeshTab = () => {
-    const modes = [
-      {
-        id: 'alpha',
-        name: 'Alpha Hunters',
-        desc: 'Tracks wallets with high pack/relic activity and unusual buying patterns.',
-        icon: ShieldCheck,
-      },
-      {
-        id: 'new',
-        name: 'New Creators',
-        desc: 'Tracks newly deployed tokens/contracts via the Zero-Code Builder.',
-        icon: Zap,
-      },
-      {
-        id: 'gravity',
-        name: 'Gravity Clusters',
-        desc: 'Visualizes clusters of wallets with the highest XP flows and token holdings.',
-        icon: Globe,
-      },
-    ];
-
-    const [activeMode, setActiveMode] = useState(modes[0]);
-
-    const legendItems = [
-      { color: neon, name: 'XP Streams', icon: Activity },
-      { color: accentBlue, name: 'Pack Pulls', icon: Box },
-      {
-        color: 'text-red-500',
-        name: 'Burn Events',
-        icon: Flame,
-      },
-      {
-        color: 'text-yellow-400',
-        name: 'Creator Coin Flows',
-        icon: DollarSign,
-      },
-    ];
-
-    return (
-      <div className="space-y-6">
-        <h2 className={`text-2xl font-extrabold ${neon}`}>
-          Mesh Explorer
-        </h2>
-
-        <div className="space-y-4">
-          <h3 className={`text-lg font-bold ${accentBlue}`}>
-            Select Mesh Mode
-          </h3>
-          <div className="grid grid-cols-3 gap-2">
-            {modes.map((mode) => (
               <button
-                key={mode.id}
-                onClick={() => setActiveMode(mode)}
-                className={`p-3 rounded-xl border transition shadow-md ${
-                  activeMode.id === mode.id
-                    ? 'border-[#00FFC0] bg-[#00FFC0]/15'
-                    : `${borderColor} bg-gray-900 hover:border-gray-500`
-                }`}
+                onClick={() => setActiveTab('market')}
+                className="flex items-center gap-1 text-[10px] text-[#7dd3fc] hover:text-[#bae6fd]"
               >
-                <mode.icon
-                  className={`w-5 h-5 mx-auto mb-1 ${
-                    activeMode.id === mode.id
-                      ? neon
-                      : 'text-gray-400'
-                  }`}
-                />
-                <span className="text-xs font-semibold text-white">
-                  {mode.name}
-                </span>
+                Open market
+                <ArrowRight className="w-3 h-3" />
               </button>
-            ))}
-          </div>
-          <div className="text-sm text-gray-500 p-3 border-l-4 border-[#00FFC0]/50 bg-gray-900/50 rounded-r-xl">
-            <span className="font-semibold text-white mr-1">
-              {activeMode.name}:
-            </span>
-            {activeMode.desc}
-          </div>
+            </div>
+            <div className="grid sm:grid-cols-3 gap-2 text-[11px]">
+              <div className="rounded-lg bg-[#020617] border border-[#111827] p-2">
+                <p className="text-gray-400 mb-1">Tiny Legends pool</p>
+                <p className="text-xs text-white font-semibold">+12.4% P&L (mock)</p>
+              </div>
+              <div className="rounded-lg bg-[#020617] border border-[#111827] p-2">
+                <p className="text-gray-400 mb-1">Zora coins tracked</p>
+                <p className="text-xs text-white font-semibold">12 tokens</p>
+              </div>
+              <div className="rounded-lg bg-[#020617] border border-[#111827] p-2">
+                <p className="text-gray-400 mb-1">Packs ecosystems</p>
+                <p className="text-xs text-white font-semibold">3 active</p>
+              </div>
+            </div>
+          </HoloCard>
         </div>
 
-        <div
-          className={`${cardBg} ${borderColor} border p-4 rounded-xl space-y-3 shadow-lg`}
-        >
-          <h3 className={`text-lg font-bold ${accentBlue}`}>
-            Legend (Flows)
-          </h3>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            {legendItems.map((item, i) => (
-              <div
-                key={i}
-                className="flex items-center space-x-2"
+        <div className="space-y-3">
+          <HoloCard>
+            <div className="flex items-center justify-between mb-1">
+              <p className="text-xs text-gray-300 font-semibold flex items-center gap-1">
+                <Trophy className="w-4 h-4 text-yellow-300" />
+                Trophies
+              </p>
+            </div>
+            <div className="flex flex-wrap gap-1.5 mt-1">
+              {trophies.map((t) => (
+                <span
+                  key={t}
+                  className="text-[10px] px-2 py-0.5 rounded-full bg-[#020617] border border-[#4b5563] text-gray-200"
+                >
+                  {t}
+                </span>
+              ))}
+              {trophies.length === 0 && (
+                <span className="text-[10px] text-gray-500">Unlock trophies by playing the mesh.</span>
+              )}
+            </div>
+          </HoloCard>
+
+          <HoloCard>
+            <p className="text-xs text-gray-300 font-semibold mb-1">Quick actions</p>
+            <div className="flex flex-col gap-1.5 text-[11px]">
+              <button
+                onClick={() => {
+                  setActiveTab('quests');
+                  addXP(5);
+                }}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#00FFC0]"
               >
-                <item.icon
-                  className={`w-4 h-4 ${
-                    item.color.includes('text-')
-                      ? item.color
-                      : neon
+                <span>Open creator quests</span>
+                <Sparkles className="w-3.5 h-3.5 text-[#00FFC0]" />
+              </button>
+              <button
+                onClick={() => setActiveTab('supcast')}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#7dd3fc]"
+              >
+                <span>Ask SupCast (Base help)</span>
+                <HelpCircle className="w-3.5 h-3.5 text-[#7dd3fc]" />
+              </button>
+              <button
+                onClick={() => setActiveTab('trading')}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#a855f7]"
+              >
+                <span>Open trading lab</span>
+                <Shuffle className="w-3.5 h-3.5 text-[#a855f7]" />
+              </button>
+            </div>
+          </HoloCard>
+        </div>
+      </div>
+    </div>
+  );
+
+  const LootTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Sword className="w-4 h-4 text-red-400" />
+          Loot & Pull Lab
+        </h2>
+        <p className="text-[11px] text-gray-500">Entropy playground · packs later onchain</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3">
+        <HoloCard className="md:col-span-2">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-300 font-semibold flex items-center gap-2">
+              <Sparkles className="w-4 h-4 text-yellow-300" />
+              Daily Jackpot 🎰
+            </p>
+            <span className="text-[11px] text-gray-500">USDC pot (mock)</span>
+          </div>
+          <p className="text-[11px] text-gray-400 mb-2">
+            Cheap entry spin. One click per day later → today only UI. Hits feed your XP, trophies and future rewards.
+          </p>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className={`${neon} text-xl font-bold`}>{jackpotPot.toFixed(2)} USDC</p>
+              <p className="text-[11px] text-gray-500">Growing with each miss</p>
+            </div>
+            <button
+              onClick={handleSpinJackpot}
+              className="px-3 py-1.5 rounded-xl bg-red-600/70 text-xs font-semibold text-white hover:bg-red-500 shadow-lg flex items-center gap-1.5"
+            >
+              Spin now
+              <Shuffle className="w-3.5 h-3.5" />
+            </button>
+          </div>
+          <div className="text-[11px] text-gray-300 px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
+            Result: <span className={neon}>{lastJackpotResult}</span>
+          </div>
+        </HoloCard>
+
+        <HoloCard>
+          <p className="text-xs text-gray-300 font-semibold mb-1">Pack modules</p>
+          <ul className="text-[11px] text-gray-400 space-y-0.5 list-disc ml-4">
+            <li>Fragments → Shards</li>
+            <li>Shards → Relics</li>
+            <li>Relics → Mythics (no burn)</li>
+          </ul>
+          <p className="text-[10px] text-gray-500 mt-2">
+            UI first, then wired to PackFactory / TokenPackSeries on Base.
+          </p>
+        </HoloCard>
+      </div>
+    </div>
+  );
+
+  const MarketTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Box className="w-4 h-4 text-[#7dd3fc]" />
+          Market · Tokens & Packs
+        </h2>
+        <p className="text-[11px] text-gray-500">Zora · Vibe · frames · SpawnEngine packs</p>
+      </div>
+
+      <div className="grid md:grid-cols-[2fr,1.4fr] gap-3">
+        <HoloCard>
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs text-gray-300 font-semibold flex items-center gap-2">
+              <Coins className="w-4 h-4 text-[#00FFC0]" />
+              Trending creator tokens (mock)
+            </p>
+            <span className="text-[11px] text-gray-500">Live Zora feed later</span>
+          </div>
+          <div className="space-y-1.5 text-[11px]">
+            {[
+              {
+                name: 'SPAWNIZ',
+                chain: 'Base',
+                move: '+18.2%',
+                note: 'Tiny Legends + packs',
+              },
+              { name: 'WARP', chain: 'Base', move: '+7.4%', note: 'Onchain activity tracker' },
+              { name: 'MESH', chain: 'Base', move: '-3.1%', note: 'XP & streak infra' },
+            ].map((t) => (
+              <div
+                key={t.name}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]"
+              >
+                <div>
+                  <p className="text-gray-200 font-semibold">{t.name}</p>
+                  <p className="text-[10px] text-gray-500">
+                    {t.chain} · {t.note}
+                  </p>
+                </div>
+                <span
+                  className={`text-xs font-semibold ${
+                    t.move.startsWith('-') ? 'text-red-400' : 'text-emerald-400'
                   }`}
-                />
-                <span className="text-gray-300">
-                  {item.name}
+                >
+                  {t.move}
                 </span>
               </div>
             ))}
           </div>
-        </div>
+        </HoloCard>
 
-        <div className="h-48 w-full bg-gray-900/50 rounded-xl border border-gray-700 flex items-center justify-center shadow-inner">
-          <p className="text-gray-500 text-sm italic">
-            3D WebGL Mesh Simulation Placeholder
-          </p>
-        </div>
-
-        <button className="w-full py-3 bg-blue-600/30 rounded-xl font-semibold text-blue-400 border border-blue-600 hover:bg-blue-600/50 transition shadow-lg text-sm">
-          Open Full Mesh Explorer (v2.0 UI)
-        </button>
+        <HoloCard>
+          <p className="text-xs text-gray-300 font-semibold mb-2">Tiny Legends / packs spotlight</p>
+          <div className="space-y-1.5 text-[11px]">
+            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
+              <div>
+                <p className="text-gray-200 font-semibold">Tiny Legends 2 · Genesis</p>
+                <p className="text-[10px] text-gray-500">Animated holo cards planned</p>
+              </div>
+              <button
+                onClick={() => {
+                  setActiveTab('profile');
+                  addXP(4);
+                }}
+                className="px-2 py-1 rounded-lg bg-[#00FFC0]/15 text-[10px] text-[#00FFC0] border border-[#00FFC0]/60"
+              >
+                View profile
+              </button>
+            </div>
+            <p className="text-[10px] text-gray-500">
+              This section later wires to Vibe / SpawnEngine pack index on Base.
+            </p>
+          </div>
+        </HoloCard>
       </div>
-    );
-  };
+    </div>
+  );
 
-  // --- SUPCAST TAB · BASE-WIDE HELP DESK ---
-  const SupportTab = () => {
+  const TradingTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Shuffle className="w-4 h-4 text-[#a855f7]" />
+          Trading Lab · Auctions & P2P
+        </h2>
+        <p className="text-[11px] text-gray-500">UI ready · contracts later</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3">
+        <HoloCard className="md:col-span-2">
+          <p className="text-xs text-gray-300 font-semibold mb-2">Create listing</p>
+          <div className="grid sm:grid-cols-2 gap-2 text-[11px]">
+            <div className="space-y-1.5">
+              <label className="block text-gray-400">Asset</label>
+              <input
+                className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200"
+                placeholder="Token / pack / NFT id"
+              />
+              <label className="block text-gray-400 mt-2">Mode</label>
+              <select className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200">
+                <option>Auction</option>
+                <option>P2P swap</option>
+                <option>Fixed price</option>
+              </select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="block text-gray-400">Price / terms</label>
+              <input
+                className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200"
+                placeholder="e.g. 0.03 ETH, or swap for X"
+              />
+              <label className="block text-gray-400 mt-2">Expiry</label>
+              <input
+                className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200"
+                placeholder="e.g. 24h"
+              />
+            </div>
+          </div>
+          <div className="flex items-center justify-between mt-3">
+            <p className="text-[10px] text-gray-500">
+              Contracts plug in later (SpawnEngine market module). For now this is layout + flow.
+            </p>
+            <button
+              onClick={() => {
+                addXP(6);
+                addTrophy('First trade draft');
+              }}
+              className="px-3 py-1.5 rounded-xl bg-[#22c55e]/80 text-xs font-semibold text-white hover:bg-[#16a34a]"
+            >
+              Draft listing
+            </button>
+          </div>
+        </HoloCard>
+
+        <HoloCard>
+          <p className="text-xs text-gray-300 font-semibold mb-2">Active ideas</p>
+          <ul className="text-[11px] text-gray-400 space-y-1 list-disc ml-4">
+            <li>Creator-only auctions for pack mythics</li>
+            <li>P2P swaps across Tiny / other collections</li>
+            <li>“Copy trader” rails for Base meme coins</li>
+          </ul>
+        </HoloCard>
+      </div>
+    </div>
+  );
+
+  const QuestsTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Sparkles className="w-4 h-4 text-[#00FFC0]" />
+          Quests & creator bounties
+        </h2>
+        <p className="text-[11px] text-gray-500">Do things on Base · earn XP / spawn rewards</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3">
+        <HoloCard className="md:col-span-2">
+          <p className="text-xs text-gray-300 font-semibold mb-2 flex items-center gap-2">
+            <Star className="w-4 h-4 text-yellow-300" />
+            Live creator quests (mock)
+          </p>
+          <div className="space-y-1.5 text-[11px]">
+            {[
+              {
+                title: 'Mint your first Tiny Legends 2 pack',
+                reward: '+40 XP · chance for “Tiny Starter” trophy',
+              },
+              {
+                title: 'Answer 1 SupCast question with real Base alpha',
+                reward: '+60 XP · +spawn rep',
+              },
+              {
+                title: 'Bridge small amount to Base and mint a Zora coin',
+                reward: '+80 XP · future spawn token rewards',
+              },
+            ].map((q, i) => (
+              <div
+                key={q.title}
+                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]"
+              >
+                <div>
+                  <p className="text-gray-200">{q.title}</p>
+                  <p className="text-[10px] text-gray-500">{q.reward}</p>
+                </div>
+                <button
+                  onClick={() => {
+                    addXP(20 + i * 10);
+                    if (i === 0) addTrophy('Tiny Starter');
+                  }}
+                  className="px-2 py-1 rounded-lg bg-[#00FFC0]/15 text-[10px] text-[#00FFC0] border border-[#00FFC0]/60"
+                >
+                  Track
+                </button>
+              </div>
+            ))}
+          </div>
+        </HoloCard>
+
+        <HoloCard>
+          <p className="text-xs text-gray-300 font-semibold mb-1">Bounty jackpot idea</p>
+          <p className="text-[11px] text-gray-400">
+            “Do this, win this.” Some quests can feed into the same jackpot logic as Loot tab — onchain raffles later,
+            UI here.
+          </p>
+        </HoloCard>
+      </div>
+    </div>
+  );
+
+  const MeshTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Network className="w-4 h-4 text-[#22d3ee]" />
+          Mesh Explorer (preview)
+        </h2>
+        <p className="text-[11px] text-gray-500">Later: wallet bubbles, flows, creator clusters</p>
+      </div>
+
+      <HoloCard>
+        <p className="text-xs text-gray-300 font-semibold mb-2">Bubble map concept</p>
+        <p className="text-[11px] text-gray-400 mb-2">
+          This view becomes “Nansen for creators” later: wallet clusters, creator ecosystems, pack migrations and token
+          streaks. For now it’s just reserved space and layout.
+        </p>
+        <div className="h-40 sm:h-52 rounded-xl bg-gradient-to-br from-[#020617] via-[#020617] to-[#0b1120] border border-[#111827] flex items-center justify-center">
+          <p className="text-[11px] text-gray-600">Mesh bubble map placeholder · animation + onchain data later</p>
+        </div>
+      </HoloCard>
+    </div>
+  );
+
+  const SupCastTab = () => {
     const userProfile = { solved: 7, xp: 350, rating: 4.5 };
-
-    const handleSendChat = () => {
-      const text = newChatMessage.trim();
-      if (!text) return;
-
-      const msg = {
-        id: Date.now(),
-        user: '@you',
-        kind: 'user',
-        text,
-        ts: new Date().toLocaleTimeString('sv-SE', {
-          hour: '2-digit',
-          minute: '2-digit',
-        }),
-      };
-
-      setChatMessages((prev) => [...prev, msg]);
-      setNewChatMessage('');
-    };
-
-    const handleGenerateSuggestion = () => {
-      const latest =
-        supCastFeed.length > 0 ? supCastFeed[0] : null;
-
-      const baseTopic = latest
-        ? latest.title.toLowerCase()
-        : 'base wallet routing between Zora, Vibe and Farcaster frames';
-
-      const suggestions = [
-        `Visual map of ${baseTopic} on Base, clean diagram UI`,
-        `Cinematic dashboard for tracking ${baseTopic} in neon HUD style`,
-        `Minimalist onchain activity feed for ${baseTopic}, mobile app UI`,
-        `Isometric Base control room monitoring ${baseTopic}`,
-        `XP quest screen gamifying ${baseTopic} across creator tokens`,
-      ];
-
-      const choice =
-        suggestions[Math.floor(Math.random() * suggestions.length)];
-      setAiSuggestion(choice);
-      showToast('AI mesh helper generated a concept.', 'success');
-    };
-
-    const categoryLabel = (cat) => {
-      switch (cat) {
-        case 'tokens':
-          return 'Tokens & liquidity';
-        case 'packs':
-          return 'Packs & odds';
-        case 'infra':
-          return 'Infra / RPC / gas';
-        case 'frames':
-          return 'Frames & miniapps';
-        case 'ux':
-          return 'UX / bugs / flows';
-        default:
-          return 'Other';
-      }
-    };
 
     return (
       <div className="space-y-4">
-        <h2
-          className={`${neon} text-sm font-semibold uppercase tracking-wide`}
-        >
+        <h2 className={`${neon} text-sm font-semibold uppercase tracking-wide flex items-center gap-2`}>
+          <MessageCircle className="w-4 h-4" />
           SupCast · Base help desk
         </h2>
 
-        {/* Row 1: Ask Base + AI helper */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* Ask */}
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
-          >
-            <h3 className={`${accentBlue} text-xs font-semibold`}>
-              Ask Base (any topic)
-            </h3>
-            <p className="text-[11px] text-gray-400">
-              Wallets, bridges, creator tokens, packs, frames,
-              infra, UX. If it touches Base, it belongs here.
+        {/* row 1 */}
+        <div className="grid sm:grid-cols-2 gap-3">
+          <HoloCard>
+            <h3 className={`${accentBlue} text-xs font-semibold mb-1`}>Ask Base (any topic)</h3>
+            <p className="text-[11px] text-gray-400 mb-2">
+              Wallets, bridges, creator tokens, packs, frames, infra. If it touches Base, it belongs here.
             </p>
 
-            <div className="flex gap-1.5 text-[11px]">
+            <div className="flex gap-1.5 text-[11px] mb-2">
               <select
                 value={newCaseCategory}
-                onChange={(e) =>
-                  setNewCaseCategory(e.target.value)
-                }
-                className="flex-1 px-2 py-1.5 rounded-lg bg-[#101018] border border-gray-700 text-gray-200 focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+                onChange={(e) => setNewCaseCategory(e.target.value as SupCastCategory)}
+                className="flex-1 px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-gray-200"
               >
                 <option value="tokens">Tokens / markets</option>
                 <option value="packs">Packs / odds</option>
-                <option value="infra">Infra / gas / RPC</option>
+                <option value="infra">Infra / gas</option>
                 <option value="frames">Frames / miniapps</option>
-                <option value="ux">UX / bugs / flows</option>
+                <option value="ux">UX / flows</option>
               </select>
-              <span className="px-2 py-1.5 rounded-lg bg-[#101018] border border-gray-700 text-[10px] text-gray-400 flex items-center">
-                <Globe className="w-3.5 h-3.5 mr-1 text-[#00FFC0]" />
+              <span className="px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-[10px] text-gray-400 flex items-center gap-1">
+                <Globe className="w-3.5 h-3.5 text-[#00FFC0]" />
                 Base-wide
               </span>
             </div>
 
             <input
               type="text"
-              placeholder="Short title: e.g. 'Bridge stuck from mainnet to Base'"
+              placeholder="Short title: e.g. bridge stuck mainnet → Base"
               value={newCaseTitle}
               onChange={(e) => setNewCaseTitle(e.target.value)}
-              className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 text-[12px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+              className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200 mb-2"
             />
-
             <textarea
               placeholder="Describe what happened, tools you used (Zora, Vibe, Base app, frame, etc.)"
               value={newCaseDesc}
               onChange={(e) => setNewCaseDesc(e.target.value)}
-              className="w-full px-2.5 py-1.75 bg-[#101018] rounded-lg border border-gray-700 h-20 text-[12px] text-white resize-none focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
+              className="w-full px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-xs text-gray-200 h-20 resize-none mb-2"
             />
-
             <button
               onClick={handlePostCase}
-              disabled={
+              disabled={!newCaseTitle || !newCaseDesc || isPostingCase}
+              className={`w-full py-2 rounded-lg text-[11px] font-semibold border ${
                 !newCaseTitle || !newCaseDesc || isPostingCase
-              }
-              className={`w-full py-2.25 rounded-lg font-semibold text-[11px] border transition ${
-                !newCaseTitle || !newCaseDesc || isPostingCase
-                  ? 'bg-gray-800 text-gray-500 border-gray-700 cursor-not-allowed'
-                  : 'bg-red-600/30 border-red-700 text-red-300 hover:bg-red-600/50'
+                  ? 'bg-gray-900 text-gray-500 border-gray-700 cursor-not-allowed'
+                  : 'bg-red-600/40 text-red-200 border-red-600 hover:bg-red-600/60'
               }`}
             >
-              {isPostingCase
-                ? 'Posting...'
-                : 'Post to SupCast mesh'}
+              {isPostingCase ? 'Posting…' : 'Post to SupCast mesh'}
             </button>
-          </div>
+          </HoloCard>
 
-          {/* AI helper */}
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl space-y-2.5 shadow-md`}
-          >
-            <h3 className={`${accentBlue} text-xs font-semibold`}>
-              AI mesh helper (mock)
-            </h3>
-            <p className="text-[11px] text-gray-400">
-              Takes the latest Base problem and turns it into a
-              visual or UX concept you can build, cast or mint.
+          <HoloCard>
+            <h3 className={`${accentBlue} text-xs font-semibold mb-1`}>AI mesh helper (mock)</h3>
+            <p className="text-[11px] text-gray-400 mb-2">
+              Takes the latest Base problem and turns it into a visual or UX concept for MidJourney, Sora, Figma or
+              quests.
             </p>
-
             <button
               onClick={handleGenerateSuggestion}
-              className="w-full px-3 py-2 rounded-xl text-[11px] font-semibold bg-pink-600/30 text-pink-200 border border-pink-600 hover:bg-pink-600/50 transition"
+              className="w-full px-3 py-2 rounded-xl text-[11px] font-semibold bg-pink-600/40 text-pink-100 border border-pink-600 hover:bg-pink-600/60"
             >
               Generate concept from latest SupCast
             </button>
-
             {aiSuggestion && (
-              <div className="bg-[#101018] p-2.5 rounded-xl border-l-4 border-pink-500 mt-2">
-                <p className="text-[11px] text-gray-300">
-                  Concept:
-                </p>
-                <p className="text-[11px] font-mono text-pink-300 break-words mt-1">
-                  {aiSuggestion}
-                </p>
+              <div className="bg-[#020617] border border-pink-600/70 rounded-xl px-2.5 py-2 mt-2">
+                <p className="text-[11px] text-gray-300 mb-1">Concept:</p>
+                <p className="text-[11px] font-mono text-pink-300 break-words">{aiSuggestion}</p>
                 <p className="text-[10px] text-gray-500 mt-1">
-                  Copy this into MidJourney, Sora, Figma, or a new
-                  quest.
+                  Copy into your prompt flow. XP + trophies later for shipped designs.
                 </p>
               </div>
             )}
-          </div>
-        </section>
+          </HoloCard>
+        </div>
 
-        {/* Row 2: Live questions */}
-        <section className="space-y-2">
+        {/* row 2: live questions */}
+        <div className="space-y-2">
           <div className="flex items-center justify-between">
-            <h3 className={`${accentBlue} text-xs font-semibold`}>
-              Live Base questions ({supCastFeed.length})
-            </h3>
-            <span className="text-[10px] text-gray-500">
-              Sorted by latest
-            </span>
+            <h3 className={`${accentBlue} text-xs font-semibold`}>Live Base questions ({supCastFeed.length})</h3>
+            <span className="text-[10px] text-gray-500">Sorted by latest</span>
           </div>
-
           {supCastFeed.length === 0 ? (
-            <div className="px-3 py-3 bg-[#101018] text-[11px] text-gray-500 rounded-2xl border border-gray-800 text-center">
-              No open cases yet. First wave of Base questions will
-              show up here.
+            <div className="px-3 py-3 bg-[#020617] rounded-2xl border border-[#111827] text-center text-[11px] text-gray-500">
+              No open cases yet. First wave of Base questions will show up here.
             </div>
           ) : (
-            supCastFeed.map((item) => (
-              <div
-                key={item.id}
-                className="px-3 py-2.5 bg-[#101018] rounded-2xl border border-gray-800 flex justify-between items-start shadow-sm"
-              >
-                <div className="flex-1 pr-2">
-                  <div className="flex items-center gap-1 mb-0.5">
-                    <span className="text-[10px] font-mono text-gray-500">
-                      {item.posterHandle || '@mesh-user'} (
-                      {item.posterId?.substring(0, 4) || '0000'}
-                      ...)
-                    </span>
-                    <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#101018] border border-gray-700 text-gray-300">
-                      {categoryLabel(item.category || 'tokens')}
-                    </span>
-                  </div>
-                  <p className="text-[12px] font-semibold text-white mt-0.5">
-                    {item.title}
-                  </p>
-                  <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">
-                    {item.description}
-                  </p>
-                </div>
-                <span
-                  className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
-                    item.status === 'Open'
-                      ? 'bg-red-600/25 text-red-300 border-red-600'
-                      : item.status === 'Claimed'
-                      ? 'bg-blue-600/25 text-blue-300 border-blue-600'
-                      : 'bg-[#00FFC0]/15 text-[#00FFC0] border-[#00FFC0]'
-                  }`}
-                >
-                  {item.status}
-                </span>
-              </div>
-            ))
-          )}
-        </section>
-
-        {/* Row 3: Chat + profile */}
-        <section className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-          {/* Chat */}
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl flex flex-col space-y-2 shadow-md`}
-          >
-            <h3 className={`${accentBlue} text-xs font-semibold`}>
-              Base mesh chat (local mock)
-            </h3>
-            <div className="flex-1 min-h-[120px] max-h-40 overflow-y-auto space-y-1.5 pr-1">
-              {chatMessages.map((m) => (
+            <div className="space-y-1.5">
+              {supCastFeed.map((item) => (
                 <div
-                  key={m.id}
-                  className={`flex ${
-                    m.kind === 'user'
-                      ? 'justify-end'
-                      : 'justify-start'
-                  }`}
+                  key={item.id}
+                  className="px-3 py-2.5 bg-[#020617] rounded-2xl border border-[#111827] flex justify-between items-start"
                 >
-                  <div
-                    className={`max-w-[85%] px-2.5 py-1.5 rounded-xl text-[11px] shadow ${
-                      m.kind === 'user'
-                        ? 'bg-[#00FFC0]/20 text-white'
-                        : 'bg-[#101018] text-gray-100 border border-gray-700'
-                    }`}
-                  >
-                    <div className="flex justify-between items-center mb-0.5">
-                      <span className="text-[9px] font-mono opacity-80">
-                        {m.user}
+                  <div className="flex-1 pr-2">
+                    <div className="flex items-center gap-1 mb-0.5">
+                      <span className="text-[10px] font-mono text-gray-500">
+                        {item.posterHandle} ({item.posterId.slice(0, 4)}…)
                       </span>
-                      <span className="text-[9px] opacity-60">
-                        {m.ts}
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-[#020617] border border-[#1f2937] text-gray-300">
+                        {categoryLabel(item.category)}
                       </span>
                     </div>
-                    <p className="whitespace-pre-wrap">
-                      {m.text}
-                    </p>
+                    <p className="text-[12px] font-semibold text-white mt-0.5">{item.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-1 line-clamp-2">{item.description}</p>
                   </div>
+                  <span
+                    className={`text-[10px] px-2 py-0.5 rounded-full font-semibold border ${
+                      item.status === 'Open'
+                        ? 'bg-red-600/25 text-red-300 border-red-600'
+                        : item.status === 'Claimed'
+                        ? 'bg-blue-600/25 text-blue-300 border-blue-600'
+                        : 'bg-[#00FFC0]/15 text-[#00FFC0] border-[#00FFC0]'
+                    }`}
+                  >
+                    {item.status}
+                  </span>
                 </div>
               ))}
             </div>
-            <div className="flex items-center mt-1">
-              <input
-                type="text"
-                value={newChatMessage}
-                onChange={(e) =>
-                  setNewChatMessage(e.target.value)
-                }
-                placeholder="Quick Base question / comment..."
-                className="flex-grow px-2.5 py-1.5 rounded-l-lg bg-[#101018] border border-gray-700 text-[11px] text-white focus:outline-none focus:ring-1 focus:ring-[#00FFC0]"
-              />
-              <button
-                onClick={handleSendChat}
-                disabled={!newChatMessage.trim()}
-                className="px-2.5 py-1.5 rounded-r-lg text-[11px] font-semibold bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0] hover:bg-[#00FFC0]/40 disabled:opacity-40"
-              >
-                Send
-              </button>
-            </div>
-            <p className="text-[9px] text-gray-500 mt-1">
-              This is local demo chat. Later wired to a real
-              public Base room.
-            </p>
-          </div>
+          )}
+        </div>
 
-          {/* Profile */}
-          <div
-            className={`${cardBg} ${borderColor} border px-3 py-3 rounded-2xl text-center space-y-2 shadow-md`}
-          >
-            <h3 className={`${neon} text-xs font-semibold`}>
-              Your SupCast profile
-            </h3>
+        {/* row 3 */}
+        <div className="grid sm:grid-cols-2 gap-3">
+          <HoloCard>
+            <h3 className={`${accentBlue} text-xs font-semibold mb-1`}>Base mesh chat (local mock)</h3>
+            <div className="flex flex-col h-40 text-[11px]">
+              <div className="flex-1 overflow-y-auto space-y-1.5 pr-1">
+                {chatMessages.map((m) => (
+                  <div key={m.id} className={`flex ${m.kind === 'user' ? 'justify-end' : 'justify-start'}`}>
+                    <div
+                      className={`max-w-[85%] px-2.5 py-1.5 rounded-xl text-[11px] shadow ${
+                        m.kind === 'user'
+                          ? 'bg-[#00FFC0]/20 text-white'
+                          : 'bg-[#020617] text-gray-100 border border-[#111827]'
+                      }`}
+                    >
+                      <div className="flex justify-between items-center mb-0.5">
+                        <span className="text-[9px] font-mono opacity-80">{m.user}</span>
+                        <span className="text-[9px] opacity-60">{m.ts}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap">{m.text}</p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <div className="flex items-center mt-1">
+                <input
+                  type="text"
+                  value={newChatMessage}
+                  onChange={(e) => setNewChatMessage(e.target.value)}
+                  placeholder="Quick Base question / comment..."
+                  className="flex-grow px-2.5 py-1.5 rounded-l-lg bg-[#020617] border border-[#111827] text-[11px] text-gray-200"
+                />
+                <button
+                  onClick={handleSendChat}
+                  disabled={!newChatMessage.trim()}
+                  className="px-2.5 py-1.5 rounded-r-lg text-[11px] font-semibold bg-[#00FFC0]/20 text-[#00FFC0] border border-[#00FFC0] hover:bg-[#00FFC0]/40 disabled:opacity-40"
+                >
+                  Send
+                </button>
+              </div>
+              <p className="text-[9px] text-gray-500 mt-1">
+                Local demo room. Later wired to shared Firestore / Neynar / onchain chat.
+              </p>
+            </div>
+          </HoloCard>
+
+          <HoloCard>
+            <h3 className={`${neon} text-xs font-semibold mb-1`}>Your SupCast profile</h3>
             <div className="flex justify-around text-center mt-1">
               <div>
-                <p
-                  className={`${neon} text-xl font-extrabold`}
-                >
-                  {userProfile.xp}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Support XP
-                </p>
+                <p className={`${neon} text-xl font-extrabold`}>{userProfile.xp}</p>
+                <p className="text-[10px] text-gray-400">Support XP</p>
               </div>
               <div>
-                <p
-                  className={`${accentBlue} text-xl font-extrabold`}
-                >
-                  {userProfile.solved}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Solved
-                </p>
+                <p className={`${accentBlue} text-xl font-extrabold`}>{userProfile.solved}</p>
+                <p className="text-[10px] text-gray-400">Solved</p>
               </div>
               <div>
-                <p className="text-xl font-extrabold text-yellow-400">
-                  {userProfile.rating}
-                </p>
-                <p className="text-[10px] text-gray-400">
-                  Rating
-                </p>
+                <p className="text-xl font-extrabold text-yellow-300">{userProfile.rating}</p>
+                <p className="text-[10px] text-gray-400">Rating</p>
               </div>
             </div>
-            <p className="text-[10px] text-gray-500">
-              Later this ties into real XP payouts, bounties and
-              Base-wide reputation.
+            <p className="text-[10px] text-gray-500 mt-2">
+              Later this ties into real XP payouts, bounties and Base-wide reputation + spawn token flow.
             </p>
-          </div>
-        </section>
+          </HoloCard>
+        </div>
       </div>
     );
   };
 
-  // --- NAV & SHEETS ---
-  const NavItem = ({ icon: Icon, tabName, label }) => (
-    <button
-      onClick={() => setCurrentTab(tabName)}
-      className={`flex flex-col items-center p-2 rounded-lg transition ${
-        currentTab === tabName
-          ? neon
-          : 'text-gray-500 hover:text-white'
-      }`}
-    >
-      <Icon className="w-6 h-6" />
-      <span className="text-xs mt-0.5">{label}</span>
-    </button>
+  const LeaderboardTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <Trophy className="w-4 h-4 text-yellow-300" />
+          Leaderboards
+        </h2>
+        <div className="flex items-center gap-1.5 text-[11px]">
+          <button
+            onClick={() => setLeaderFilter('xp')}
+            className={`px-2 py-1 rounded-lg border text-xs ${
+              leaderFilter === 'xp'
+                ? 'bg-[#0f172a] text-[#00FFC0] border-[#00FFC0]'
+                : 'bg-[#020617] text-gray-400 border-[#111827]'
+            }`}
+          >
+            XP
+          </button>
+          <button
+            onClick={() => setLeaderFilter('packs')}
+            className={`px-2 py-1 rounded-lg border text-xs ${
+              leaderFilter === 'packs'
+                ? 'bg-[#0f172a] text-[#7dd3fc] border-[#7dd3fc]'
+                : 'bg-[#020617] text-gray-400 border-[#111827]'
+            }`}
+          >
+            Packs
+          </button>
+          <button
+            onClick={() => setLeaderFilter('trader')}
+            className={`px-2 py-1 rounded-lg border text-xs ${
+              leaderFilter === 'trader'
+                ? 'bg-[#0f172a] text-[#a855f7] border-[#a855f7]'
+                : 'bg-[#020617] text-gray-400 border-[#111827]'
+            }`}
+          >
+            Traders
+          </button>
+        </div>
+      </div>
+
+      <HoloCard>
+        <div className="flex items-center justify-between mb-2">
+          <p className="text-xs text-gray-300 font-semibold">Top mesh players (mock)</p>
+          <p className="text-[10px] text-gray-500">SpawnEngine-only · cross-app later</p>
+        </div>
+        <div className="space-y-1.5 text-[11px]">
+          {filteredLeaders.map((l) => (
+            <div
+              key={l.id}
+              className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-[10px] text-gray-500 w-6">#{l.rank}</span>
+                <p className="text-gray-200">{l.handle}</p>
+              </div>
+              <div className="flex items-center gap-3">
+                <span className="text-[10px] text-gray-400 flex items-center gap-1">
+                  <Trophy className="w-3 h-3 text-yellow-300" />
+                  {l.trophies}
+                </span>
+                <span className={neon}>{l.xp} XP</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </HoloCard>
+    </div>
   );
 
-  const Sheet = ({ id, title, children }) => (
-    <div
-      className={`fixed bottom-0 left-1/2 transform -translate-x-1/2 w-full max-w-sm h-[90vh] ${darkBg} rounded-t-3xl shadow-2xl transition-transform duran>니다`
+  const ProfileTab = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+          <User className="w-4 h-4 text-[#7dd3fc]" />
+          Profile · Tiny Legends & mesh identity
+        </h2>
+        <p className="text-[11px] text-gray-500">Later synced with Farcaster / Zora profile</p>
+      </div>
+
+      <div className="grid md:grid-cols-3 gap-3">
+        <HoloCard className="md:col-span-2">
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black">
+              SP
+            </div>
+            <div>
+              <p className="text-sm text-white font-semibold">@spawniz</p>
+              <p className="text-[11px] text-gray-400">Base · Tiny Legends · SpawnEngine</p>
+            </div>
+          </div>
+          <div className="grid sm:grid-cols-3 gap-2 text-[11px]">
+            <div className="px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
+              <p className="text-gray-400 mb-0.5">Mesh level</p>
+              <p className={`${neon} text-sm font-semibold`}>L{level}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
+              <p className="text-gray-400 mb-0.5">XP</p>
+              <p className="text-sm text-white font-semibold">{xp}</p>
+            </div>
+            <div className="px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
+              <p className="text-gray-400 mb-0.5">Tiny achievements</p>
+              <p className="text-sm text-white font-semibold">Coming UI</p>
+            </div>
+          </div>
+          <p className="text-[11px] text-gray-500 mt-2">
+            This page will later show exact Tiny Legends sets, foil pulls, mythics and card stats for your wallet.
+          </p>
+        </HoloCard>
+
+        <HoloCard>
+          <p className="text-xs text-gray-300 font-semibold mb-1">Gamification summary</p>
+          <ul className="text-[11px] text-gray-400 space-y-1 list-disc ml-4">
+            <li>XP from: quests, packs, SupCast, jackpots, trading.</li>
+            <li>Trophies from key moments (first mythic, jackpot, big quests).</li>
+            <li>Rep from SupCast support & clean trading.</li>
+          </ul>
+        </HoloCard>
+      </div>
+    </div>
+  );
+
+  return (
+    <div className="min-h-screen bg-[#020617] text-gray-100">
+      <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
+        {/* header */}
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black shadow-lg">
+              SE
+            </div>
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-[0.2em]">SpawnEngine</p>
+              <p className="text-sm text-white font-semibold">
+                Home for everything onchain · Base creator OS
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2 text-xs">
+            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
+              <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
+              <span className="text-gray-300">Wallet: not connected (UI only)</span>
+            </div>
+            <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
+              <Zap className="w-3.5 h-3.5 text-yellow-300" />
+              <span className="text-gray-300">Streak {streakDays}d</span>
+            </div>
+          </div>
+        </header>
+
+        {/* nav */}
+        <nav className="flex flex-wrap gap-1.5 mb-4">
+          <TabButton id="home" icon={<Home className="w-4 h-4" />} label="Home" />
+          <TabButton id="loot" icon={<Sword className="w-4 h-4" />} label="Loot" />
+          <TabButton id="market" icon={<Box className="w-4 h-4" />} label="Market" />
+          <TabButton id="trading" icon={<Shuffle className="w-4 h-4" />} label="Trading" />
+          <TabButton id="quests" icon={<Sparkles className="w-4 h-4" />} label="Quests" />
+          <TabButton id="mesh" icon={<Network className="w-4 h-4" />} label="Mesh" />
+          <TabButton id="supcast" icon={<MessageCircle className="w-4 h-4" />} label="SupCast" />
+          <TabButton id="leaderboard" icon={<Trophy className="w-4 h-4" />} label="Leaders" />
+          <TabButton id="profile" icon={<User className="w-4 h-4" />} label="Profile" />
+        </nav>
+
+        {/* content */}
+        <main className="pb-8 space-y-4">
+          {activeTab === 'home' && <HomeTab />}
+          {activeTab === 'loot' && <LootTab />}
+          {activeTab === 'market' && <MarketTab />}
+          {activeTab === 'trading' && <TradingTab />}
+          {activeTab === 'quests' && <QuestsTab />}
+          {activeTab === 'mesh' && <MeshTab />}
+          {activeTab === 'supcast' && <SupCastTab />}
+          {activeTab === 'leaderboard' && <LeaderboardTab />}
+          {activeTab === 'profile' && <ProfileTab />}
+        </main>
+      </div>
+    </div>
+  );
+};
+
+export default App;
