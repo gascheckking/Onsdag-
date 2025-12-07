@@ -18,7 +18,6 @@ import {
   Wallet,
   Settings,
   HelpCircle,
-  X,
 } from 'lucide-react';
 
 type MainTab =
@@ -76,9 +75,8 @@ const App: React.FC = () => {
   const [streakDays, setStreakDays] = useState<number>(3);
   const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
   const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // bottom sheet
-  const [showSettings, setShowSettings] = useState(false); // header dropdown
-  const [showApiKey, setShowApiKey] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
+
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
@@ -542,84 +540,242 @@ const App: React.FC = () => {
     </div>
   );
 
-  const MarketTab = () => (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-          <Box className="w-4 h-4 text-[#7dd3fc]" />
-          Market · Tokens & Packs
-        </h2>
-        <p className="text-[11px] text-gray-500">Zora · Vibe · frames · SpawnEngine packs</p>
-      </div>
+  const MarketTab = () => {
+    const trending = [
+      {
+        title: 'Quest Bundle · XP Boost',
+        desc: 'Complete 3 quests for boosted XP multiplier.',
+        price: '0.05 ETH',
+        joined: '320 joined',
+        emoji: '⚔️',
+      },
+      {
+        title: 'Frame Miniapp Slot',
+        desc: 'Reserve a slot in a Farcaster frame rotation.',
+        price: '0.07 ETH',
+        joined: '145 joined',
+        emoji: '📝',
+      },
+      {
+        title: 'Pack Series: Vibes S1',
+        desc: 'Tiered rarity ladder with mythic foils.',
+        price: '0.025 ETH',
+        joined: '980 joined',
+        emoji: '🎟️',
+      },
+      {
+        title: 'Base NFT Art Drop',
+        desc: 'Curated onchain art drop with limited-time pulls.',
+        price: '0.12 ETH',
+        joined: '145 joined',
+        emoji: '📈',
+      },
+    ];
 
-      <div className="grid md:grid-cols-[2fr,1.4fr] gap-3">
-        <HoloCard>
-          <div className="flex items-center justify-between mb-2">
-            <p className="text-xs text-gray-300 font-semibold flex items-center gap-2">
-              <Coins className="w-4 h-4 text-[#00FFC0]" />
-              Trending creator tokens (mock)
-            </p>
-            <span className="text-[11px] text-gray-500">Live Zora feed later</span>
+    const slots = [
+      {
+        title: 'Smart-contract review',
+        desc: 'Have your pack or token contract reviewed.',
+        price: '0.5 ETH',
+        emoji: '🎓',
+      },
+      {
+        title: 'Onchain education track',
+        desc: 'Structured learning paths for Base creators.',
+        price: '0.08 ETH',
+        emoji: '🚀',
+      },
+      {
+        title: 'Token launch bundle',
+        desc: 'Deploy token + frame + quest layer together.',
+        price: '0.21 ETH',
+        emoji: '🏡',
+      },
+      {
+        title: 'Pack listing syndicate',
+        desc: 'Cross-list packs to multiple marketplaces.',
+        price: '0.15 ETH',
+        emoji: '💻',
+      },
+      {
+        title: 'Miniapp integration slot',
+        desc: 'Integrate your app into SpawnEngine mesh.',
+        price: '0.18 ETH',
+        emoji: '💡',
+      },
+      {
+        title: 'Farcaster growth clinic',
+        desc: 'Improve cast strategy around creator tokens.',
+        price: '0.04 ETH',
+        emoji: '🖥️',
+      },
+      {
+        title: 'Base ecosystem connect',
+        desc: 'Connect with infra partners around your pack.',
+        price: '0.3 ETH',
+        emoji: '🎨',
+      },
+      {
+        title: 'LP safety workshop',
+        desc: 'Hands-on session for keeping floors alive.',
+        price: '0.09 ETH',
+        emoji: '📊',
+      },
+    ];
+
+    const partners = [
+      { name: 'DAO Builder Pro', status: 'Active' },
+      { name: 'GameFi Studio X', status: 'Active' },
+      { name: 'Secure Audit Corp', status: 'Pending' },
+      { name: 'Mesh Integrations Hub', status: 'Draft' },
+    ];
+
+    return (
+      <div className="space-y-4">
+        {/* top status strip */}
+        <div className="flex items-center justify-between text-[11px] text-gray-400">
+          <div className="flex items-center gap-3">
+            <span>
+              GAS:{' '}
+              <span className="text-emerald-400 font-semibold">
+                0.05 gwei
+              </span>
+            </span>
+            <span>
+              MODE:{' '}
+              <span className="text-sky-400 font-semibold">
+                Alpha hunter
+              </span>
+            </span>
           </div>
-          <div className="space-y-1.5 text-[11px]">
-            {[
-              {
-                name: 'SPAWNIZ',
-                chain: 'Base',
-                move: '+18.2%',
-                note: 'Tiny Legends + packs',
-              },
-              { name: 'WARP', chain: 'Base', move: '+7.4%', note: 'Onchain activity tracker' },
-              { name: 'MESH', chain: 'Base', move: '-3.1%', note: 'XP & streak infra' },
-            ].map((t) => (
+          <span>
+            WALLETS:{' '}
+            <span className="text-gray-200 font-semibold">
+              4 linked
+            </span>
+          </span>
+        </div>
+
+        {/* hero card */}
+        <HoloCard>
+          <div className="flex items-center justify-between gap-3">
+            <div className="max-w-md">
+              <p className="text-xs font-semibold text-[#00FFC0] tracking-[0.15em]">
+                SPAWNENGINE MARKET
+              </p>
+              <p className="text-sm text-white mt-1">
+                One surface for Base activities, creator tools and pack utilities.
+              </p>
+              <p className="text-[11px] text-gray-400 mt-1.5">
+                Mesh-curated slots only. All mock for now – wires into SpawnEngine Pack / Quest / Miniapp modules later.
+              </p>
+            </div>
+            <button className="px-3 py-2 rounded-xl bg-emerald-500/90 text-xs font-semibold text-black hover:bg-emerald-400 shadow-lg whitespace-nowrap">
+              Create listing (mock)
+            </button>
+          </div>
+        </HoloCard>
+
+        {/* trending */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-300 font-semibold flex items-center gap-2">
+              Trending right now
+            </p>
+            <span className="text-[10px] text-gray-500">Scroll · curated by mesh</span>
+          </div>
+          <div className="grid sm:grid-cols-2 gap-3">
+            {trending.map((t) => (
               <div
-                key={t.name}
-                className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]"
+                key={t.title}
+                className="rounded-2xl bg-[#020617] border border-[#111827] px-3 py-3 flex flex-col justify-between"
               >
-                <div>
-                  <p className="text-gray-200 font-semibold">{t.name}</p>
-                  <p className="text-[10px] text-gray-500">
-                    {t.chain} · {t.note}
-                  </p>
+                <div className="flex items-start gap-2">
+                  <div className="text-xl">{t.emoji}</div>
+                  <div className="flex-1">
+                    <p className="text-sm text-white font-semibold">{t.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">{t.desc}</p>
+                  </div>
                 </div>
-                <span
-                  className={`text-xs font-semibold ${
-                    t.move.startsWith('-') ? 'text-red-400' : 'text-emerald-400'
-                  }`}
-                >
-                  {t.move}
-                </span>
+                <div className="flex items-center justify-between mt-3 text-[11px]">
+                  <span className="text-emerald-400 font-semibold">{t.price}</span>
+                  <span className="text-gray-500">{t.joined}</span>
+                </div>
               </div>
             ))}
           </div>
-        </HoloCard>
+        </div>
 
-        <HoloCard>
-          <p className="text-xs text-gray-300 font-semibold mb-2">Tiny Legends / packs spotlight</p>
-          <div className="space-y-1.5 text-[11px]">
-            <div className="flex items-center justify-between px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
-              <div>
-                <p className="text-gray-200 font-semibold">Tiny Legends 2 · Genesis</p>
-                <p className="text-[10px] text-gray-500">Animated holo cards planned</p>
-              </div>
-              <button
-                onClick={() => {
-                  setActiveTab('profile');
-                  addXP(4);
-                }}
-                className="px-2 py-1 rounded-lg bg-[#00FFC0]/15 text-[10px] text-[#00FFC0] border border-[#00FFC0]/60"
-              >
-                View profile
-              </button>
-            </div>
-            <p className="text-[10px] text-gray-500">
-              This section later wires to Vibe / SpawnEngine pack index on Base.
-            </p>
+        {/* active slots */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <p className="text-xs text-gray-300 font-semibold">All active market slots</p>
+            <span className="text-[10px] text-gray-500">Filters (soon)</span>
           </div>
-        </HoloCard>
+          <div className="grid sm:grid-cols-2 gap-2">
+            {slots.map((s) => (
+              <div
+                key={s.title}
+                className="rounded-2xl bg-[#020617] border border-[#111827] px-3 py-3 flex flex-col justify-between"
+              >
+                <div className="flex items-start gap-2">
+                  <div className="text-xl">{s.emoji}</div>
+                  <div className="flex-1">
+                    <p className="text-[13px] text-white font-semibold">{s.title}</p>
+                    <p className="text-[11px] text-gray-400 mt-1">{s.desc}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-between mt-3 text-[11px]">
+                  <span className="text-emerald-400 font-semibold">{s.price}</span>
+                  <button className="px-2 py-1 rounded-lg border border-emerald-500/70 text-emerald-300 text-[10px] hover:bg-emerald-500/10">
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* partners */}
+        <div className="space-y-2">
+          <p className="text-xs text-gray-300 font-semibold">Integration partners</p>
+          <div className="rounded-2xl border border-[#111827] bg-[#020617] text-[11px] overflow-hidden">
+            <div className="flex px-3 py-2 border-b border-[#111827] text-gray-500">
+              <div className="w-1/2">Partner</div>
+              <div className="w-1/4">Status</div>
+              <div className="w-1/4 text-right">Action</div>
+            </div>
+            {partners.map((p) => (
+              <div
+                key={p.name}
+                className="flex px-3 py-2 border-b border-[#020617] last:border-b-0 items-center"
+              >
+                <div className="w-1/2 text-gray-200">{p.name}</div>
+                <div className="w-1/4">
+                  <span
+                    className={`px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                      p.status === 'Active'
+                        ? 'bg-emerald-500/10 text-emerald-300'
+                        : p.status === 'Pending'
+                        ? 'bg-amber-500/10 text-amber-300'
+                        : 'bg-slate-500/10 text-slate-300'
+                    }`}
+                  >
+                    {p.status}
+                  </span>
+                </div>
+                <div className="w-1/4 text-right">
+                  <button className="text-[10px] text-sky-300 hover:text-sky-100 font-semibold">
+                    Manage
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
-    </div>
-  );
+    );
+  };
 
   const TradingTab = () => (
     <div className="space-y-4">
@@ -769,8 +925,22 @@ const App: React.FC = () => {
           This view becomes “Nansen for creators” later: wallet clusters, creator ecosystems, pack migrations and token
           streaks. For now it’s just reserved space and layout.
         </p>
-        <div className="h-40 sm:h-52 rounded-xl bg-gradient-to-br from-[#020617] via-[#020617] to-[#0b1120] border border-[#111827] flex items-center justify-center">
-          <p className="text-[11px] text-gray-600">Mesh bubble map placeholder · animation + onchain data later</p>
+        <div className="relative h-40 sm:h-56 rounded-2xl border border-[#111827] bg-[#020617] overflow-hidden">
+          {/* glowing nodes */}
+          <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_12%_18%,#22c55e_0,transparent_55%),radial-gradient(circle_at_80%_26%,#0ea5e9_0,transparent_55%),radial-gradient(circle_at_30%_88%,#a855f7_0,transparent_55%),radial-gradient(circle_at_78%_80%,#f97316_0,transparent_55%)]" />
+          {/* grid lines */}
+          <div className="absolute inset-0 opacity-40 bg-[linear-gradient(to_right,rgba(148,163,184,0.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[size:26px_26px]" />
+          {/* orbit rings */}
+          <div className="absolute inset-4 opacity-40 border border-[#38bdf8] rounded-full" />
+          <div className="absolute inset-10 opacity-30 border border-[#22c55e] rounded-full" />
+          <div className="absolute inset-16 opacity-25 border border-[#a855f7] rounded-full" />
+          {/* label */}
+          <div className="relative z-10 flex flex-col items-center justify-center h-full text-[11px]">
+            <p className="text-gray-100 mb-1">Mesh bubble map placeholder</p>
+            <p className="text-gray-500">
+              Wallet bubbles, path trails & snipes later · UI first.
+            </p>
+          </div>
         </div>
       </HoloCard>
     </div>
@@ -1119,7 +1289,7 @@ const App: React.FC = () => {
           </div>
 
           {/* right side + settings dropdown */}
-          <div className="flex items-center gap-2 text-xs relative">
+          <div className="relative flex items-center gap-2 text-xs">
             <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
               <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
               <span className="text-gray-300">Wallet: not connected (UI only)</span>
@@ -1131,62 +1301,58 @@ const App: React.FC = () => {
 
             {/* settings button */}
             <button
-              type="button"
               onClick={() => setShowSettings((prev) => !prev)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#4b5563] hover:bg-[#020617]/80"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#00FFC0]"
             >
               <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
               <span>Settings</span>
             </button>
 
-            {/* dropdown landing links */}
+            {/* dropdown */}
             {showSettings && (
-              <div className="absolute right-0 top-10 mt-1 w-64 sm:w-72 rounded-2xl bg-[#020617] border border-[#1b1f2b] shadow-[0_18px_40px_rgba(0,0,0,0.65)] z-30">
+              <div className="absolute right-0 top-11 w-56 rounded-2xl bg-[#020617] border border-[#1f2937] shadow-xl z-20 text-[11px]">
                 <div className="px-3 py-2 border-b border-[#111827]">
-                  <p className="text-[11px] text-gray-300 font-semibold">SpawnEngine OS</p>
+                  <p className="text-gray-300 font-semibold">SpawnEngine OS</p>
                   <p className="text-[10px] text-gray-500">Landing links · mock only (for now)</p>
                 </div>
-                <div className="py-1">
-                  {[
-                    {
-                      label: 'SupCast · Base help desk',
-                      desc: 'Support hub & question feed',
-                      tab: 'supcast' as MainTab,
-                    },
-                    {
-                      label: 'Loot & Pull Lab · entropy UI',
-                      desc: 'Pack-style spins, jackpots & odds',
-                      tab: 'loot' as MainTab,
-                    },
-                    {
-                      label: 'Market · tokens & packs index',
-                      desc: 'Creator tokens, packs & LP overviews',
-                      tab: 'market' as MainTab,
-                    },
-                    {
-                      label: 'Mesh Explorer · bubble map',
-                      desc: 'Wallet clusters & creator ecosystems',
-                      tab: 'mesh' as MainTab,
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.label}
-                      type="button"
-                      onClick={() => {
-                        setActiveTab(item.tab);
-                        setShowSettings(false);
-                      }}
-                      className="w-full text-left px-3 py-2 text-[11px] hover:bg-[#020617]/80 flex flex-col"
-                    >
-                      <span className="text-gray-100">{item.label}</span>
-                      <span className="text-[10px] text-gray-500">{item.desc}</span>
-                    </button>
-                  ))}
-                </div>
-                <div className="px-3 py-2 border-t border-[#111827]">
-                  <p className="text-[10px] text-gray-500">
-                    Later: docs, API keys, miniapp embed code, onchain modules.
-                  </p>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('supcast');
+                    setShowSettings(false);
+                  }}
+                >
+                  SupCast · Base help desk
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('loot');
+                    setShowSettings(false);
+                  }}
+                >
+                  Loot & Pull Lab · entropy UI
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('market');
+                    setShowSettings(false);
+                  }}
+                >
+                  Market · tokens & packs index
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('mesh');
+                    setShowSettings(false);
+                  }}
+                >
+                  Mesh Explorer · bubble map
+                </button>
+                <div className="px-3 py-2 border-t border-[#111827] text-[10px] text-gray-500">
+                  Later: docs, API keys, miniapp embed code, onchain modules.
                 </div>
               </div>
             )}
@@ -1195,8 +1361,8 @@ const App: React.FC = () => {
 
         {/* nav */}
         <nav className="flex flex-wrap gap-1.5 mb-4">
-          <TabButton id="home" icon={<Home className="w-4 h-4" />} label="Home" />
-          <TabButton id="loot" icon={<Sword className="w-4 h-4" />} label="Loot" />
+          <TabButton id="home" icon={<Home className="w-4 h-4" />} label="Overview" />
+          <TabButton id="loot" icon={<Sword className="w-4 h-4" />} label="Packs" />
           <TabButton id="market" icon={<Box className="w-4 h-4" />} label="Market" />
           <TabButton id="trading" icon={<Shuffle className="w-4 h-4" />} label="Trading" />
           <TabButton id="quests" icon={<Sparkles className="w-4 h-4" />} label="Quests" />
@@ -1218,99 +1384,6 @@ const App: React.FC = () => {
           {activeTab === 'leaderboard' && <LeaderboardTab />}
           {activeTab === 'profile' && <ProfileTab />}
         </main>
-
-        {/* bottom-sheet Settings & API (Pillars) */}
-        {isSettingsOpen && (
-          <div
-            className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm"
-            onClick={() => setIsSettingsOpen(false)}
-          >
-            <div
-              className="w-full max-w-md rounded-t-3xl bg-[#020617] border-t border-[#1b1f2b] p-4 pb-6 shadow-[0_-24px_80px_rgba(0,0,0,0.95)]"
-              onClick={(e) => e.stopPropagation()}
-            >
-              {/* drag handle */}
-              <div className="flex justify-center mb-3">
-                <div className="w-12 h-1.5 rounded-full bg-gray-700" />
-              </div>
-
-              {/* header rad med avatar + stäng */}
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white">
-                    S
-                  </div>
-                <div>
-                    <p className="text-sm text-white font-semibold">@spawniz</p>
-                    <p className="text-[11px] text-gray-400">Mesh ID · Creator</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsSettingsOpen(false)}
-                  className="w-8 h-8 flex items-center justify-center rounded-full bg-[#020617] border border-[#1f2937] hover:border-red-500 transition"
-                >
-                  <X className="w-4 h-4 text-gray-400" />
-                </button>
-              </div>
-
-              <h2 className="text-[#00FFC0] text-sm font-semibold mb-2">Settings & API</h2>
-
-              <div className="space-y-3 text-[11px]">
-                {/* Pillar 1 */}
-                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
-                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
-                    XP SDK & Integration (Pillar 1)
-                  </p>
-                  <p className="text-gray-400 mb-2">
-                    Manage API keys to integrate SpawnEngine XP into your own apps.
-                  </p>
-                  <button
-                    onClick={() => setShowApiKey((v) => !v)}
-                    className="w-full mt-1 py-2 rounded-xl bg-emerald-600 text-[11px] font-semibold text-white hover:bg-emerald-500"
-                  >
-                    {showApiKey ? 'Hide API Key' : 'Show API Key'}
-                  </button>
-                  {showApiKey && (
-                    <p className="mt-2 px-2 py-1.5 rounded-lg bg-black/50 border border-emerald-700 font-mono text-[10px] text-emerald-300 break-all">
-                      spn_test_0xDEADBEEF_MESH_XP_KEY
-                    </p>
-                  )}
-                </div>
-
-                {/* Pillar 4 */}
-                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
-                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
-                    Premium Mesh Filters (Pillar 4)
-                  </p>
-                  <p className="text-gray-400 mb-2">
-                    Unlock Alpha Hunters and Whale Tracking. Requires 500 SPN staking.
-                  </p>
-                  <button className="w-full py-2 rounded-xl bg-slate-800 text-[11px] font-semibold text-gray-300 border border-slate-600">
-                    Upgrade to Premium
-                  </button>
-                </div>
-
-                {/* Pillar 8 */}
-                <div className="rounded-2xl bg-[#020617] border border-[#1b1f2b] px-3 py-3">
-                  <p className="text-[#38bdf8] text-xs font-semibold mb-0.5">
-                    Launchpad Builder (Pillar 8)
-                  </p>
-                  <p className="text-gray-400 mb-2">
-                    Access the Zero-Code Token/NFT Builder and Bonding Curve configuration.
-                  </p>
-                  <button className="w-full py-2 rounded-xl bg-indigo-600 text-[11px] font-semibold text-white hover:bg-indigo-500">
-                    Open Creator Panel
-                  </button>
-                </div>
-
-                {/* Notifications */}
-                <button className="w-full mt-1 py-2.5 rounded-xl bg-slate-900 border border-[#1f2937] text-[11px] font-semibold text-gray-200">
-                  Manage Notifications
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
       </div>
     </div>
   );
