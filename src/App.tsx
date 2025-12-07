@@ -18,6 +18,7 @@ import {
   Wallet,
   Settings,
   HelpCircle,
+  X,
 } from 'lucide-react';
 
 type MainTab =
@@ -75,8 +76,9 @@ const App: React.FC = () => {
   const [streakDays, setStreakDays] = useState<number>(3);
   const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
   const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
-  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false); // bottom sheet
+  const [showSettings, setShowSettings] = useState(false); // header dropdown
+  const [showApiKey, setShowApiKey] = useState(false);
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
@@ -161,7 +163,6 @@ const App: React.FC = () => {
 
   // Helpers
   const showToast = useCallback((msg: string) => {
-    // ultra-simple, no DOM hacking
     console.log('[TOAST]', msg);
   }, []);
 
@@ -189,9 +190,7 @@ const App: React.FC = () => {
     className = '',
     children,
   }) => (
-    <div
-      className={`relative rounded-2xl p-[1px] bg-gradient-to-br from-[#00FFC0] via-[#7dd3fc] to-[#a855f7] shadow-[0_0_24px_rgba(0,0,0,0.7)]`}
-    >
+    <div className="relative rounded-2xl p-[1px] bg-gradient-to-br from-[#00FFC0] via-[#7dd3fc] to-[#a855f7] shadow-[0_0_24px_rgba(0,0,0,0.7)]">
       <div
         className={`${cardBg} ${borderColor} rounded-2xl h-full w-full p-3 sm:p-4 transition-transform duration-200 hover:-translate-y-0.5 hover:shadow-[0_0_28px_rgba(0,255,192,0.25)] hover:rotate-[0.25deg] ${className}`}
       >
@@ -1106,7 +1105,7 @@ const App: React.FC = () => {
     <div className="min-h-screen bg-[#020617] text-gray-100">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
         {/* header */}
-                <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
+        <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black shadow-lg">
               SE
@@ -1120,7 +1119,7 @@ const App: React.FC = () => {
           </div>
 
           {/* right side + settings dropdown */}
-          <div className="relative flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs relative">
             <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
               <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
               <span className="text-gray-300">Wallet: not connected (UI only)</span>
@@ -1132,46 +1131,62 @@ const App: React.FC = () => {
 
             {/* settings button */}
             <button
+              type="button"
               onClick={() => setShowSettings((prev) => !prev)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#00FFC0]"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#4b5563] hover:bg-[#020617]/80"
             >
-              <HelpCircle className="w-3.5 h-3.5 text-[#7dd3fc]" />
+              <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
               <span>Settings</span>
             </button>
 
-            {/* dropdown */}
+            {/* dropdown landing links */}
             {showSettings && (
-              <div className="absolute right-0 top-11 w-56 rounded-2xl bg-[#020617] border border-[#1f2937] shadow-xl z-20 text-[11px]">
+              <div className="absolute right-0 top-10 mt-1 w-64 sm:w-72 rounded-2xl bg-[#020617] border border-[#1b1f2b] shadow-[0_18px_40px_rgba(0,0,0,0.65)] z-30">
                 <div className="px-3 py-2 border-b border-[#111827]">
-                  <p className="text-gray-300 font-semibold">SpawnEngine OS</p>
+                  <p className="text-[11px] text-gray-300 font-semibold">SpawnEngine OS</p>
                   <p className="text-[10px] text-gray-500">Landing links · mock only (for now)</p>
                 </div>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => setActiveTab('supcast')}
-                >
-                  SupCast · Base help desk
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => setActiveTab('loot')}
-                >
-                  Loot & Pull Lab · entropy UI
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => setActiveTab('market')}
-                >
-                  Market · tokens & packs index
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => setActiveTab('mesh')}
-                >
-                  Mesh Explorer · bubble map
-                </button>
-                <div className="px-3 py-2 border-t border-[#111827] text-[10px] text-gray-500">
-                  Later: docs, API keys, miniapp embed code, onchain modules.
+                <div className="py-1">
+                  {[
+                    {
+                      label: 'SupCast · Base help desk',
+                      desc: 'Support hub & question feed',
+                      tab: 'supcast' as MainTab,
+                    },
+                    {
+                      label: 'Loot & Pull Lab · entropy UI',
+                      desc: 'Pack-style spins, jackpots & odds',
+                      tab: 'loot' as MainTab,
+                    },
+                    {
+                      label: 'Market · tokens & packs index',
+                      desc: 'Creator tokens, packs & LP overviews',
+                      tab: 'market' as MainTab,
+                    },
+                    {
+                      label: 'Mesh Explorer · bubble map',
+                      desc: 'Wallet clusters & creator ecosystems',
+                      tab: 'mesh' as MainTab,
+                    },
+                  ].map((item) => (
+                    <button
+                      key={item.label}
+                      type="button"
+                      onClick={() => {
+                        setActiveTab(item.tab);
+                        setShowSettings(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-[11px] hover:bg-[#020617]/80 flex flex-col"
+                    >
+                      <span className="text-gray-100">{item.label}</span>
+                      <span className="text-[10px] text-gray-500">{item.desc}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="px-3 py-2 border-t border-[#111827]">
+                  <p className="text-[10px] text-gray-500">
+                    Later: docs, API keys, miniapp embed code, onchain modules.
+                  </p>
                 </div>
               </div>
             )}
@@ -1203,6 +1218,8 @@ const App: React.FC = () => {
           {activeTab === 'leaderboard' && <LeaderboardTab />}
           {activeTab === 'profile' && <ProfileTab />}
         </main>
+
+        {/* bottom-sheet Settings & API (Pillars) */}
         {isSettingsOpen && (
           <div
             className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 backdrop-blur-sm"
@@ -1223,7 +1240,7 @@ const App: React.FC = () => {
                   <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-purple-500 via-fuchsia-500 to-indigo-500 flex items-center justify-center text-xs font-bold text-white">
                     S
                   </div>
-                  <div>
+                <div>
                     <p className="text-sm text-white font-semibold">@spawniz</p>
                     <p className="text-[11px] text-gray-400">Mesh ID · Creator</p>
                   </div>
@@ -1294,6 +1311,8 @@ const App: React.FC = () => {
             </div>
           </div>
         )}
+      </div>
+    </div>
   );
 };
 
