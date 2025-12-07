@@ -18,6 +18,10 @@ import {
   Wallet,
   Settings,
   HelpCircle,
+  Code2,
+  Palette,
+  Radar,
+  HeartHandshake,
 } from 'lucide-react';
 
 type MainTab =
@@ -32,6 +36,8 @@ type MainTab =
   | 'profile';
 
 type SupCastCategory = 'tokens' | 'packs' | 'infra' | 'frames' | 'ux';
+
+type MeshRole = 'dev' | 'creator' | 'alpha' | 'collector';
 
 interface SupCastCase {
   id: string;
@@ -80,6 +86,26 @@ const App: React.FC = () => {
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
+
+  // Roll / mesh ID
+  const [meshRole, setMeshRole] = useState<MeshRole>('creator');
+  const [pendingRole, setPendingRole] = useState<MeshRole>('creator');
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(true);
+
+  const meshRoleLabel = (role: MeshRole) => {
+    switch (role) {
+      case 'dev':
+        return 'Dev / Builder';
+      case 'creator':
+        return 'Creator / Artist';
+      case 'alpha':
+        return 'Alpha hunter';
+      case 'collector':
+        return 'Collector / Fan';
+      default:
+        return 'Explorer';
+    }
+  };
 
   // Holo theme helpers
   const neon = 'text-[#00FFC0]';
@@ -327,6 +353,24 @@ const App: React.FC = () => {
           <p className="text-[11px] sm:text-xs text-gray-400 mt-1 max-w-xl">
             One HUD for Base: creator tokens, packs, quests, XP, SupCast, trading & mesh automations.
           </p>
+          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
+            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-gray-200">
+              @spawniz
+            </span>
+            <button
+              onClick={() => setShowRoleModal(true)}
+              className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-gray-200 flex items-center gap-1 hover:border-[#00FFC0]"
+            >
+              <Radar className="w-3.5 h-3.5 text-[#00FFC0]" />
+              <span>Mesh ID · {meshRoleLabel(meshRole)}</span>
+            </button>
+            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-emerald-300">
+              Base · Mesh ecosystems
+            </span>
+            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-violet-300">
+              Farcaster ready
+            </span>
+          </div>
         </div>
         <div className="flex items-center gap-3 text-xs">
           <div className="px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] flex items-center gap-1.5">
@@ -927,9 +971,9 @@ const App: React.FC = () => {
         </p>
         <div className="relative h-40 sm:h-56 rounded-2xl border border-[#111827] bg-[#020617] overflow-hidden">
           {/* glowing nodes */}
-          <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_12%_18%,#22c55e_0,transparent_55%),radial-gradient(circle_at_80%_26%,#0ea5e9_0,transparent_55%),radial-gradient(circle_at_30%_88%,#a855f7_0,transparent_55%),radial-gradient(circle_at_78%_80%,#f97316_0,transparent_55%)]" />
+          <div className="absolute inset-0 opacity-90 bg-[radial-gradient(circle_at_12%_18%,#22c55e_0,transparent_55%),radial-gradient(circle_at_80%_26%,#0ea5e9_0,transparent_55%),radial-gradient(circle_at_30%_88%,#a855f7_0,transparent_55%),radial-gradient(circle_at_78%_80%,#f97316_0,transparent_55%)]" />
           {/* grid lines */}
-          <div className="absolute inset-0 opacity-40 bg-[linear-gradient(to_right,rgba(148,163,184,0.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[size:26px_26px]" />
+          <div className="absolute inset-0 opacity-45 bg-[linear-gradient(to_right,rgba(148,163,184,0.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[size:26px_26px]" />
           {/* orbit rings */}
           <div className="absolute inset-4 opacity-40 border border-[#38bdf8] rounded-full" />
           <div className="absolute inset-10 opacity-30 border border-[#22c55e] rounded-full" />
@@ -937,8 +981,8 @@ const App: React.FC = () => {
           {/* label */}
           <div className="relative z-10 flex flex-col items-center justify-center h-full text-[11px]">
             <p className="text-gray-100 mb-1">Mesh bubble map placeholder</p>
-            <p className="text-gray-500">
-              Wallet bubbles, path trails & snipes later · UI first.
+            <p className="text-gray-500 text-center px-4">
+              Wallet bubbles, path trails & snipes later · this is the holo background playground.
             </p>
           </div>
         </div>
@@ -1237,7 +1281,9 @@ const App: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-white font-semibold">@spawniz</p>
-              <p className="text-[11px] text-gray-400">Base · Tiny Legends · SpawnEngine</p>
+              <p className="text-[11px] text-gray-400">
+                {meshRoleLabel(meshRole)} · Base · Tiny Legends · SpawnEngine
+              </p>
             </div>
           </div>
           <div className="grid sm:grid-cols-3 gap-2 text-[11px]">
@@ -1257,19 +1303,111 @@ const App: React.FC = () => {
           <p className="text-[11px] text-gray-500 mt-2">
             This page will later show exact Tiny Legends sets, foil pulls, mythics and card stats for your wallet.
           </p>
+          <button
+            onClick={() => setShowRoleModal(true)}
+            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-[11px] text-gray-200 hover:border-[#00FFC0]"
+          >
+            <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
+            Change mesh role
+          </button>
         </HoloCard>
 
         <HoloCard>
           <p className="text-xs text-gray-300 font-semibold mb-1">Gamification summary</p>
           <ul className="text-[11px] text-gray-400 space-y-1 list-disc ml-4">
-            <li>XP from: quests, packs, SupCast, jackpots, trading.</li>
-            <li>Trophies from key moments (first mythic, jackpot, big quests).</li>
-            <li>Rep from SupCast support & clean trading.</li>
+            <li>XP från quests, packs, SupCast, jackpots, trading.</li>
+            <li>Trophies från key moments (första mythic, jackpot, stora quests).</li>
+            <li>Rep från SupCast support & clean trading.</li>
           </ul>
         </HoloCard>
       </div>
     </div>
   );
+
+  // Role modal (högt upp som på skärmen)
+  const RoleModal: React.FC = () => {
+    if (!showRoleModal) return null;
+
+    const RoleCard: React.FC<{
+      id: MeshRole;
+      title: string;
+      desc: string;
+      icon: React.ReactNode;
+    }> = ({ id, title, desc, icon }) => {
+      const active = pendingRole === id;
+      return (
+        <button
+          onClick={() => setPendingRole(id)}
+          className={`text-left rounded-xl border px-2.5 py-2 flex flex-col gap-1 transition ${
+            active
+              ? 'border-[#00FFC0] bg-[#00FFC0]/10 shadow-[0_0_20px_rgba(0,255,192,0.35)]'
+              : 'border-[#111827] bg-[#020617] hover:border-[#7dd3fc]'
+          }`}
+        >
+          <div className="flex items-center gap-1.5 text-[11px]">
+            {icon}
+            <span className="text-gray-100 font-semibold">{title}</span>
+          </div>
+          <p className="text-[10px] text-gray-400">{desc}</p>
+        </button>
+      );
+    };
+
+    return (
+      <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm pb-24 sm:pb-0">
+        <div className="w-full max-w-lg px-3">
+          <HoloCard>
+            <button
+              onClick={() => setShowRoleModal(false)}
+              className="absolute right-3 top-2 text-gray-500 text-sm hover:text-gray-300"
+            >
+              ×
+            </button>
+            <h3 className="text-sm font-semibold text-white mb-1">Choose your role</h3>
+            <p className="text-[11px] text-gray-400 mb-3">
+              This sets your XP path, quests and how you appear in mesh.
+            </p>
+            <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
+              <RoleCard
+                id="dev"
+                title="Dev / Builder"
+                desc="Deploy contracts, write miniapps, infra wizard."
+                icon={<Code2 className="w-3.5 h-3.5 text-emerald-300" />}
+              />
+              <RoleCard
+                id="creator"
+                title="Creator / Artist"
+                desc="Packs, cards, tokens, art drops, onchain worlds."
+                icon={<Palette className="w-3.5 h-3.5 text-pink-300" />}
+              />
+              <RoleCard
+                id="alpha"
+                title="Alpha hunter"
+                desc="PnL, tokens, packs, XP races, sniping heat."
+                icon={<Radar className="w-3.5 h-3.5 text-sky-300" />}
+              />
+              <RoleCard
+                id="collector"
+                title="Collector / Fan"
+                desc="Open packs, complete sets, foil raids & quests."
+                icon={<HeartHandshake className="w-3.5 h-3.5 text-yellow-300" />}
+              />
+            </div>
+            <button
+              onClick={() => {
+                setMeshRole(pendingRole);
+                setShowRoleModal(false);
+                addXP(12);
+              }}
+              className="w-full py-2 rounded-xl bg-gradient-to-r from-[#00FFC0] via-[#22d3ee] to-[#a855f7] text-xs font-semibold text-black shadow-lg hover:brightness-110"
+            >
+              Save role
+            </button>
+          </HoloCard>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-[#020617] text-gray-100">
@@ -1385,6 +1523,9 @@ const App: React.FC = () => {
           {activeTab === 'profile' && <ProfileTab />}
         </main>
       </div>
+
+      {/* choose-role overlay */}
+      <RoleModal />
     </div>
   );
 };
