@@ -24,6 +24,7 @@ import {
   HeartHandshake,
 } from 'lucide-react';
 
+// --- TYPER ---
 type MainTab =
   | 'home'
   | 'loot'
@@ -73,6 +74,30 @@ interface ActivityRow {
   note?: string;
 }
 
+// --- MOCK: Firebase Setup and Database Functions ---
+const MOCK_DB_DELAY = 1000; // 1 second network latency
+
+/**
+ * Mocks posting a case to a remote 'SupCast' database (e.g. Firestore).
+ * @returns A promise that resolves after MOCK_DB_DELAY with the new case data.
+ */
+const postSupCastCaseToDB = (caseData: Omit<SupCastCase, 'id' | 'status' | 'posterHandle' | 'posterId'>): Promise<SupCastCase> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const newCase: SupCastCase = {
+        ...caseData,
+        id: `db-${Date.now()}`,
+        status: 'Open',
+        posterHandle: '@spawniz',
+        posterId: '0xspawn-db',
+      };
+      // In a real app: firebase.firestore().collection('supcast').add(newCase);
+      resolve(newCase);
+    }, MOCK_DB_DELAY);
+  });
+};
+
+
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTab>('home');
 
@@ -87,8 +112,12 @@ const App: React.FC = () => {
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
 
-  // ... (Rad 46)
+  // Roll / mesh ID
+  const [meshRole, setMeshRole] = useState<MeshRole>('creator');
+  const [pendingRole, setPendingRole] = useState<MeshRole>('creator');
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(true);
 
+  // *** DIN UPPDATERADE FUNKTION ***
   const meshRoleLabel = (role: MeshRole): string => {
     switch (role) {
       case 'dev':
@@ -99,16 +128,10 @@ const App: React.FC = () => {
         return 'Alpha hunter';
       case 'collector':
         return 'Collector / Fan';
-      // Observera: Ingen 'default' behövs nu när vi har en explicit returtyp och
-      // alla definierade fall är täckta. Vi tar bort den för att undvika
-      // TS-kompilatorns varning. Om du vill ha en fallback, använd:
-      // default: return 'Explorer';
     }
-    return 'Explorer'; // Fallback om input-typen inte stämde 100%
+    return 'Explorer'; // Fallback
   };
-
-// ... (Resten av koden)
-
+  // *****************************
 
   // Holo theme helpers
   const neon = 'text-[#00FFC0]';
@@ -245,25 +268,34 @@ const App: React.FC = () => {
     }
   };
 
-  const handlePostCase = useCallback(() => {
+  // *** UPPDATERAD SupCast POST-FUNKTION (använder mock-tjänst) ***
+  const handlePostCase = useCallback(async () => {
     if (!newCaseTitle.trim() || !newCaseDesc.trim()) return;
     setIsPostingCase(true);
-    const newCase: SupCastCase = {
-      id: `local-${Date.now()}`,
+
+    const caseData = {
       title: newCaseTitle.trim(),
       description: newCaseDesc.trim(),
-      status: 'Open',
-      posterHandle: '@spawniz',
-      posterId: '0xspawn',
       category: newCaseCategory,
     };
-    setSupCastFeed((prev) => [newCase, ...prev]);
-    setNewCaseTitle('');
-    setNewCaseDesc('');
-    setNewCaseCategory('tokens');
-    setIsPostingCase(false);
-    addXP(8);
-  }, [newCaseTitle, newCaseDesc, newCaseCategory, addXP]);
+
+    try {
+      const postedCase = await postSupCastCaseToDB(caseData); // Använder mockad DB-tjänst
+
+      setSupCastFeed((prev) => [postedCase, ...prev]);
+      setNewCaseTitle('');
+      setNewCaseDesc('');
+      setNewCaseCategory('tokens');
+      addXP(8); // Lägg till XP när det lyckas
+      showToast('SupCast case posted to mesh!');
+    } catch (error) {
+      showToast('Error posting SupCast case.');
+      console.error('DB Post Error:', error);
+    } finally {
+      setIsPostingCase(false);
+    }
+  }, [newCaseTitle, newCaseDesc, newCaseCategory, addXP, showToast]);
+  // *****************************
 
   const handleGenerateSuggestion = useCallback(() => {
     const latest = supCastFeed[0];
@@ -1534,3 +1566,15 @@ const App: React.FC = () => {
 };
 
 export default App;
+
+// src/main.tsx
+
+import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App.tsx';
+
+ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
