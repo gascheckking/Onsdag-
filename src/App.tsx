@@ -87,12 +87,9 @@ const App: React.FC = () => {
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
 
-  // Roll / mesh ID
-  const [meshRole, setMeshRole] = useState<MeshRole>('creator');
-  const [pendingRole, setPendingRole] = useState<MeshRole>('creator');
-  const [showRoleModal, setShowRoleModal] = useState<boolean>(true);
+  // ... (Rad 46)
 
-  const meshRoleLabel = (role: MeshRole) => {
+  const meshRoleLabel = (role: MeshRole): string => {
     switch (role) {
       case 'dev':
         return 'Dev / Builder';
@@ -102,10 +99,16 @@ const App: React.FC = () => {
         return 'Alpha hunter';
       case 'collector':
         return 'Collector / Fan';
-      default:
-        return 'Explorer';
+      // Observera: Ingen 'default' behövs nu när vi har en explicit returtyp och
+      // alla definierade fall är täckta. Vi tar bort den för att undvika
+      // TS-kompilatorns varning. Om du vill ha en fallback, använd:
+      // default: return 'Explorer';
     }
+    return 'Explorer'; // Fallback om input-typen inte stämde 100%
   };
+
+// ... (Resten av koden)
+
 
   // Holo theme helpers
   const neon = 'text-[#00FFC0]';
