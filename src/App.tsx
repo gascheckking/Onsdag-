@@ -34,7 +34,8 @@ type MainTab =
   | 'mesh'
   | 'supcast'
   | 'leaderboard'
-  | 'profile';
+  | 'profile'
+  | 'settings'; // NY!
 
 type SupCastCategory = 'tokens' | 'packs' | 'infra' | 'frames' | 'ux';
 
@@ -106,7 +107,7 @@ const App: React.FC = () => {
   const [streakDays, setStreakDays] = useState<number>(3);
   const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
   const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
-  const [showSettings, setShowSettings] = useState(false);
+  // const [showSettings, setShowSettings] = useState(false); // BORTTAGEN!
 
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
@@ -1359,6 +1360,88 @@ const App: React.FC = () => {
     </div>
   );
 
+  // *** NY INSTÄLLNINGS-FLIK (SETTINGS) ***
+  const SettingsTab = () => (
+    <div className="space-y-4">
+        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
+            <Settings className="w-4 h-4 text-[#7dd3fc]" />
+            Settings & Integrations (Pillars)
+        </h2>
+        
+        {/* Profile Card / Header */}
+        <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-lg font-bold text-black shadow-lg">
+                S
+            </div>
+            <div>
+                <p className="text-sm text-white font-semibold">@spawniz</p>
+                <p className="text-[11px] text-gray-400">Mesh ID: {meshRoleLabel(meshRole)}</p>
+            </div>
+            <span className="px-2 py-0.5 rounded-full bg-emerald-700/50 border border-emerald-500 text-[10px] text-white font-semibold flex items-center gap-1">
+                <div className="w-2 h-2 rounded-full bg-emerald-400" />
+                Mesh v1.0 PRO
+            </span>
+        </div>
+
+        {/* Wallet Management (Dina önskemål) */}
+        <HoloCard>
+            <h3 className="text-xs font-semibold text-[#00FFC0] mb-2">Wallet Management</h3>
+            <p className="text-[11px] text-gray-400 mb-2">
+                Manage which wallet is currently used for transactions and identity.
+            </p>
+            <div className="space-y-2 text-[11px]">
+                <button className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#00FFC0]">
+                    <span>Current Active: 0x...64AB (MetaMask)</span>
+                    <Coins className="w-4 h-4 text-[#00FFC0]" />
+                </button>
+                <button className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#a855f7]">
+                    <span>Swap / Connect New Wallet</span>
+                    <Wallet className="w-4 h-4 text-[#a855f7]" />
+                </button>
+            </div>
+        </HoloCard>
+
+        {/* XP SDK & Integration (Pillar 1) */}
+        <HoloCard>
+            <h3 className="text-xs font-semibold text-[#7dd3fc] mb-2">XP SDK & API (Pillar 1)</h3>
+            <p className="text-[11px] text-gray-400 mb-3">
+                Generate and manage API keys to integrate SpawnEngine XP into your external apps or frames.
+            </p>
+            <div className="flex items-center gap-2">
+                <input 
+                    type="text" 
+                    readOnly 
+                    value="sk-spawniz-r82BfA-mock"
+                    className="flex-grow px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-[11px] text-gray-300 font-mono"
+                />
+                <button className="py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-sky-600/30 text-sky-300 border border-sky-600 hover:bg-sky-600/50">
+                    Regenerate
+                </button>
+            </div>
+        </HoloCard>
+
+        {/* Premium Mesh Filters (Pillar 4) */}
+        <HoloCard>
+            <h3 className="text-xs font-semibold text-[#a855f7] mb-2">Premium Mesh Filters (Pillar 4)</h3>
+            <p className="text-[11px] text-gray-400 mb-3">
+                Unlock Alpha Hunters and Whale Tracking features. Requires 500 SPN staking.
+            </p>
+            <button className="w-full py-2 rounded-lg text-[11px] font-semibold bg-violet-600/60 text-white border border-violet-600 hover:bg-violet-600/80">
+                Upgrade to Mesh Pro Tier
+            </button>
+        </HoloCard>
+
+        {/* Manage Notifications */}
+        <HoloCard>
+            <button className="w-full py-2 rounded-lg text-[11px] font-semibold bg-[#020617] text-white border border-[#111827] hover:border-[#00FFC0]">
+                Manage Push & Email Notifications
+            </button>
+        </HoloCard>
+    </div>
+  );
+  // *** SLUT NY INSTÄLLNINGS-FLIK ***
+
+
   // Role modal (högt upp som på skärmen)
   const RoleModal: React.FC = () => {
     if (!showRoleModal) return null;
@@ -1445,11 +1528,17 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-[#020617] text-gray-100">
+    // BYT UT KLASSEN HÄR: använder holo-mesh-bg klassen från index.html
+    <div className="min-h-screen holo-mesh-bg text-gray-100"> 
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
         {/* header */}
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
+          
+          {/* GÖR DETTA KLICKBART FÖR PROFIL */}
+          <button 
+            onClick={() => setActiveTab('profile')} 
+            className="flex items-center gap-3 text-left hover:opacity-80 transition"
+          >
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black shadow-lg">
               SE
             </div>
@@ -1459,10 +1548,10 @@ const App: React.FC = () => {
                 Home for everything onchain · Base creator OS
               </p>
             </div>
-          </div>
+          </button>
 
-          {/* right side + settings dropdown */}
-          <div className="relative flex items-center gap-2 text-xs">
+          {/* right side + settings button (utan dropdown) */}
+          <div className="flex items-center gap-2 text-xs">
             <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
               <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
               <span className="text-gray-300">Wallet: not connected (UI only)</span>
@@ -1472,63 +1561,14 @@ const App: React.FC = () => {
               <span className="text-gray-300">Streak {streakDays}d</span>
             </div>
 
-            {/* settings button */}
+            {/* settings button, länkar direkt till fliken */}
             <button
-              onClick={() => setShowSettings((prev) => !prev)}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#00FFC0]"
+              onClick={() => setActiveTab('settings')}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#7dd3fc]"
             >
               <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
               <span>Settings</span>
             </button>
-
-            {/* dropdown */}
-            {showSettings && (
-              <div className="absolute right-0 top-11 w-56 rounded-2xl bg-[#020617] border border-[#1f2937] shadow-xl z-20 text-[11px]">
-                <div className="px-3 py-2 border-b border-[#111827]">
-                  <p className="text-gray-300 font-semibold">SpawnEngine OS</p>
-                  <p className="text-[10px] text-gray-500">Landing links · mock only (for now)</p>
-                </div>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => {
-                    setActiveTab('supcast');
-                    setShowSettings(false);
-                  }}
-                >
-                  SupCast · Base help desk
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => {
-                    setActiveTab('loot');
-                    setShowSettings(false);
-                  }}
-                >
-                  Loot & Pull Lab · entropy UI
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => {
-                    setActiveTab('market');
-                    setShowSettings(false);
-                  }}
-                >
-                  Market · tokens & packs index
-                </button>
-                <button
-                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
-                  onClick={() => {
-                    setActiveTab('mesh');
-                    setShowSettings(false);
-                  }}
-                >
-                  Mesh Explorer · bubble map
-                </button>
-                <div className="px-3 py-2 border-t border-[#111827] text-[10px] text-gray-500">
-                  Later: docs, API keys, miniapp embed code, onchain modules.
-                </div>
-              </div>
-            )}
           </div>
         </header>
 
@@ -1543,6 +1583,7 @@ const App: React.FC = () => {
           <TabButton id="supcast" icon={<MessageCircle className="w-4 h-4" />} label="SupCast" />
           <TabButton id="leaderboard" icon={<Trophy className="w-4 h-4" />} label="Leaders" />
           <TabButton id="profile" icon={<User className="w-4 h-4" />} label="Profile" />
+          <TabButton id="settings" icon={<Settings className="w-4 h-4" />} label="Settings" /> {/* NY KNAPP */}
         </nav>
 
         {/* content */}
@@ -1556,6 +1597,7 @@ const App: React.FC = () => {
           {activeTab === 'supcast' && <SupCastTab />}
           {activeTab === 'leaderboard' && <LeaderboardTab />}
           {activeTab === 'profile' && <ProfileTab />}
+          {activeTab === 'settings' && <SettingsTab />} {/* NY FLIK */}
         </main>
       </div>
 
@@ -1566,15 +1608,3 @@ const App: React.FC = () => {
 };
 
 export default App;
-
-// src/main.tsx
-
-import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
