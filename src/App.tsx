@@ -1606,5 +1606,181 @@ const App: React.FC = () => {
     </div>
   );
 };
+import React, { useState, createContext, useContext, useRef, useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
+
+// -------------------------------------------------------------
+// 1. Kontext för globalt tillstånd (Tema)
+// -------------------------------------------------------------
+const ThemeContext = createContext();
+
+// Hook för att använda temakontexten
+const useTheme = () => useContext(ThemeContext);
+
+// -------------------------------------------------------------
+// 2. Mesh Bubble Bakgrund (Visuell Effekt)
+// -------------------------------------------------------------
+// OBS: För en riktigt cool effekt, se CSS-instruktionerna nedan!
+const MeshBackground = () => (
+    <div className="mesh-background">
+        {/* Simulering av ett coolt, bubblande mesh-nät */}
+        <div className="bubble-1"></div>
+        <div className="bubble-2"></div>
+        <div className="bubble-3"></div>
+    </div>
+);
+
+// -------------------------------------------------------------
+// 3. Inställnings Dropdown (Kugghjulet)
+// -------------------------------------------------------------
+const SettingsDropdown = () => {
+    const { theme, toggleTheme } = useTheme();
+    const [isOpen, setIsOpen] = useState(false);
+    const dropdownRef = useRef(null);
+
+    // Stänger rullgardinen när man klickar utanför
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+                setIsOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [dropdownRef]);
+
+    return (
+        <div className="settings-container" ref={dropdownRef}>
+            {/* Kugghjuls-ikon (Trigger) */}
+            <button 
+                className="settings-trigger" 
+                onClick={() => setIsOpen(!isOpen)}
+                aria-label="Öppna inställningar"
+            >
+                ⚙️
+            </button>
+
+            {/* Dropdown-innehåll (Rullgardinsmeny) */}
+            {isOpen && (
+                <div className="dropdown-menu">
+                    <h4 className="dropdown-title">Inställningar</h4>
+                    
+                    <div className="setting-item">
+                        <span>Tema:</span>
+                        <button onClick={toggleTheme} className="theme-toggle-btn">
+                            {theme === 'light' ? '☀️ Ljust' : '🌙 Mörkt'}
+                        </button>
+                    </div>
+
+                    <Link to="/about" className="setting-item link" onClick={() => setIsOpen(false)}>
+                        ℹ️ Om Appen
+                    </Link>
+                </div>
+            )}
+        </div>
+    );
+};
+
+// -------------------------------------------------------------
+// 4. Header & Navigering
+// -------------------------------------------------------------
+const Header = () => {
+    return (
+        <header className="main-header">
+            <Link to="/" className="logo">
+                ✨ SpawnEngine Mesh App
+            </Link>
+            <nav className="main-nav">
+                <Link to="/data">Data Översikt</Link>
+                <Link to="/about">Om Oss</Link>
+                <SettingsDropdown /> {/* Kugghjulet är här! */}
+            </nav>
+        </header>
+    );
+};
+
+// -------------------------------------------------------------
+// 5. Sidkomponenter
+// -------------------------------------------------------------
+
+// Startsidan (Landningssidan - standard "/")
+const HomePage = () => {
+    const { theme } = useTheme();
+    return (
+        <div className="page-content center-content">
+            <h1 style={{ color: theme === 'dark' ? '#00eaff' : '#333' }}>
+                Välkommen till SpawnEngine
+            </h1>
+            <p className="subtitle">
+                Ett modernt gränssnitt för dynamisk dataanalys.
+            </p>
+            <Link to="/data" className="cta-button">
+                STARTA ANALYS
+            </Link>
+        </div>
+    );
+};
+
+// Data sida (Placeholder)
+const DataPage = () => {
+    return (
+        <div className="page-content">
+            <h2>📊 Dynamisk Dataöversikt</h2>
+            <p>Här renderas dina interaktiva grafer och realtidsdata.</p>
+            <div className="data-box">
+                <p>⚙️ Din data är nu implementerad och klar för presentation!</p>
+            </div>
+        </div>
+    );
+};
+
+// Om Oss sida (Placeholder)
+const AboutPage = () => {
+    return (
+        <div className="page-content">
+            <h2>ℹ️ Om Projektet</h2>
+            <p>Denna applikation byggdes supersnabbt med Vite, React och lite magi!</p>
+            <p>Version: 1.0.0 (Klar)</p>
+        </div>
+    );
+};
+
+// -------------------------------------------------------------
+// 6. Huvudapplikationen
+// -------------------------------------------------------------
+
+const App = () => {
+    const [theme, setTheme] = useState('dark'); // Startar i mörkt läge (coolast!)
+
+    const toggleTheme = () => {
+        setTheme(currentTheme => (currentTheme === 'light' ? 'dark' : 'light'));
+    };
+
+    return (
+        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+            <Router>
+                <div className={`app-container ${theme}-theme`}>
+                    <MeshBackground /> {/* Lägger bakgrunden överallt */}
+                    <Header />
+                    
+                    <main className="main-content-area">
+                        <Routes>
+                            {/* Startsidan är rot-vägen (/) - Ingen egen flik behövs */}
+                            <Route path="/" element={<HomePage />} /> 
+                            <Route path="/data" element={<DataPage />} />
+                            <Route path="/about" element={<AboutPage />} />
+                            
+                            {/* Inställningssidan (kan läggas till, men rullgardinen räcker) */}
+                            {/* <Route path="/settings" element={<SettingsPage />} /> */}
+                        </Routes>
+                    </main>
+                    
+                </div>
+            </Router>
+        </ThemeContext.Provider>
+    );
+};
+
+export default App;
 
 export default App;
