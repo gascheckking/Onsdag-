@@ -18,13 +18,8 @@ import {
   Wallet,
   Settings,
   HelpCircle,
-  Code2,
-  Palette,
-  Radar,
-  HeartHandshake,
 } from 'lucide-react';
 
-// --- TYPER ---
 type MainTab =
   | 'home'
   | 'loot'
@@ -34,12 +29,11 @@ type MainTab =
   | 'mesh'
   | 'supcast'
   | 'leaderboard'
-  | 'profile'
-  | 'settings'; // NY!
+  | 'profile';
 
 type SupCastCategory = 'tokens' | 'packs' | 'infra' | 'frames' | 'ux';
 
-type MeshRole = 'dev' | 'creator' | 'alpha' | 'collector';
+type UserRole = 'dev' | 'creator' | 'alpha' | 'collector';
 
 interface SupCastCase {
   id: string;
@@ -75,64 +69,39 @@ interface ActivityRow {
   note?: string;
 }
 
-// --- MOCK: Firebase Setup and Database Functions ---
-const MOCK_DB_DELAY = 1000; // 1 second network latency
-
-/**
- * Mocks posting a case to a remote 'SupCast' database (e.g. Firestore).
- * @returns A promise that resolves after MOCK_DB_DELAY with the new case data.
- */
-const postSupCastCaseToDB = (caseData: Omit<SupCastCase, 'id' | 'status' | 'posterHandle' | 'posterId'>): Promise<SupCastCase> => {
-  return new Promise((resolve) => {
-    setTimeout(() => {
-      const newCase: SupCastCase = {
-        ...caseData,
-        id: `db-${Date.now()}`,
-        status: 'Open',
-        posterHandle: '@spawniz',
-        posterId: '0xspawn-db',
-      };
-      // In a real app: firebase.firestore().collection('supcast').add(newCase);
-      resolve(newCase);
-    }, MOCK_DB_DELAY);
-  });
+const roleLabel = (role: UserRole | null): string => {
+  switch (role) {
+    case 'dev':
+      return 'Dev / Builder';
+    case 'creator':
+      return 'Creator / Artist';
+    case 'alpha':
+      return 'Alpha hunter';
+    case 'collector':
+      return 'Collector / Fan';
+    default:
+      return 'No role yet';
+  }
 };
-
 
 const App: React.FC = () => {
   const [activeTab, setActiveTab] = useState<MainTab>('home');
+
+  // mesh-roll
+  const [role, setRole] = useState<UserRole | null>(null);
+  const [pendingRole, setPendingRole] = useState<UserRole>('dev');
+  const [showRoleModal, setShowRoleModal] = useState<boolean>(true);
 
   // XP / gamification
   const [xp, setXp] = useState<number>(420);
   const [streakDays, setStreakDays] = useState<number>(3);
   const [trophies, setTrophies] = useState<string[]>(['Tiny Founder', 'Early Mesh']);
   const [spawnRep, setSpawnRep] = useState<number>(78); // 0–100
-  // const [showSettings, setShowSettings] = useState(false); // BORTTAGEN!
+  const [showSettings, setShowSettings] = useState(false);
 
   const level = useMemo(() => Math.floor(xp / 200) + 1, [xp]);
   const xpInLevel = useMemo(() => xp % 200, [xp]);
   const xpToNext = 200 - xpInLevel;
-
-  // Roll / mesh ID
-  const [meshRole, setMeshRole] = useState<MeshRole>('creator');
-  const [pendingRole, setPendingRole] = useState<MeshRole>('creator');
-  const [showRoleModal, setShowRoleModal] = useState<boolean>(true);
-
-  // *** DIN UPPDATERADE FUNKTION ***
-  const meshRoleLabel = (role: MeshRole): string => {
-    switch (role) {
-      case 'dev':
-        return 'Dev / Builder';
-      case 'creator':
-        return 'Creator / Artist';
-      case 'alpha':
-        return 'Alpha hunter';
-      case 'collector':
-        return 'Collector / Fan';
-    }
-    return 'Explorer'; // Fallback
-  };
-  // *****************************
 
   // Holo theme helpers
   const neon = 'text-[#00FFC0]';
@@ -269,34 +238,25 @@ const App: React.FC = () => {
     }
   };
 
-  // *** UPPDATERAD SupCast POST-FUNKTION (använder mock-tjänst) ***
-  const handlePostCase = useCallback(async () => {
+  const handlePostCase = useCallback(() => {
     if (!newCaseTitle.trim() || !newCaseDesc.trim()) return;
     setIsPostingCase(true);
-
-    const caseData = {
+    const newCase: SupCastCase = {
+      id: `local-${Date.now()}`,
       title: newCaseTitle.trim(),
       description: newCaseDesc.trim(),
+      status: 'Open',
+      posterHandle: '@spawniz',
+      posterId: '0xspawn',
       category: newCaseCategory,
     };
-
-    try {
-      const postedCase = await postSupCastCaseToDB(caseData); // Använder mockad DB-tjänst
-
-      setSupCastFeed((prev) => [postedCase, ...prev]);
-      setNewCaseTitle('');
-      setNewCaseDesc('');
-      setNewCaseCategory('tokens');
-      addXP(8); // Lägg till XP när det lyckas
-      showToast('SupCast case posted to mesh!');
-    } catch (error) {
-      showToast('Error posting SupCast case.');
-      console.error('DB Post Error:', error);
-    } finally {
-      setIsPostingCase(false);
-    }
-  }, [newCaseTitle, newCaseDesc, newCaseCategory, addXP, showToast]);
-  // *****************************
+    setSupCastFeed((prev) => [newCase, ...prev]);
+    setNewCaseTitle('');
+    setNewCaseDesc('');
+    setNewCaseCategory('tokens');
+    setIsPostingCase(false);
+    addXP(8);
+  }, [newCaseTitle, newCaseDesc, newCaseCategory, addXP]);
 
   const handleGenerateSuggestion = useCallback(() => {
     const latest = supCastFeed[0];
@@ -359,6 +319,13 @@ const App: React.FC = () => {
     setLastJackpotResult(result);
   }, [addXP, addTrophy]);
 
+  const handleSaveRole = useCallback(() => {
+    setRole(pendingRole);
+    setShowRoleModal(false);
+    addXP(10);
+    addTrophy('Mesh role set');
+  }, [pendingRole, addXP, addTrophy]);
+
   // Tabs
   const TabButton: React.FC<{ id: MainTab; icon: React.ReactNode; label: string }> = ({
     id,
@@ -379,34 +346,24 @@ const App: React.FC = () => {
   );
 
   // Views
-  const HomeTab = () => (
+  const HomeTab: React.FC<{ role: UserRole | null }> = ({ role }) => (
     <div className="space-y-4">
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-2">
         <div>
           <h1 className="text-lg sm:text-xl font-semibold text-white tracking-wide">
-            SpawnEngine · <span className={neon}>Onchain Home Base</span>
+            SpawnEngine · <span className={neon}>Mesh HUD</span>
           </h1>
           <p className="text-[11px] sm:text-xs text-gray-400 mt-1 max-w-xl">
-            One HUD for Base: creator tokens, packs, quests, XP, SupCast, trading & mesh automations.
+            Modular HUD for Base: creator tokens, packs, quests, XP, SupCast & mesh automations.
           </p>
-          <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
-            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-gray-200">
-              @spawniz
-            </span>
-            <button
-              onClick={() => setShowRoleModal(true)}
-              className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-gray-200 flex items-center gap-1 hover:border-[#00FFC0]"
-            >
-              <Radar className="w-3.5 h-3.5 text-[#00FFC0]" />
-              <span>Mesh ID · {meshRoleLabel(meshRole)}</span>
-            </button>
-            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-emerald-300">
-              Base · Mesh ecosystems
-            </span>
-            <span className="px-2 py-1 rounded-full bg-[#020617] border border-[#1b1f2b] text-violet-300">
-              Farcaster ready
-            </span>
-          </div>
+          <p className="text-[11px] text-gray-400 mt-1">
+            Mesh ID ·{' '}
+            {role ? (
+              <span className={neon}>{roleLabel(role)}</span>
+            ) : (
+              <span className="text-gray-500">pick a role to tune XP & quests</span>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-3 text-xs">
           <div className="px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] flex items-center gap-1.5">
@@ -864,7 +821,7 @@ const App: React.FC = () => {
           <Shuffle className="w-4 h-4 text-[#a855f7]" />
           Trading Lab · Auctions & P2P
         </h2>
-        <p className="text-[11px] text-gray-500">UI ready · contracts later</p>
+      <p className="text-[11px] text-gray-500">UI ready · contracts later</p>
       </div>
 
       <div className="grid md:grid-cols-3 gap-3">
@@ -1007,9 +964,9 @@ const App: React.FC = () => {
         </p>
         <div className="relative h-40 sm:h-56 rounded-2xl border border-[#111827] bg-[#020617] overflow-hidden">
           {/* glowing nodes */}
-          <div className="absolute inset-0 opacity-90 bg-[radial-gradient(circle_at_12%_18%,#22c55e_0,transparent_55%),radial-gradient(circle_at_80%_26%,#0ea5e9_0,transparent_55%),radial-gradient(circle_at_30%_88%,#a855f7_0,transparent_55%),radial-gradient(circle_at_78%_80%,#f97316_0,transparent_55%)]" />
+          <div className="absolute inset-0 opacity-80 bg-[radial-gradient(circle_at_12%_18%,#22c55e_0,transparent_55%),radial-gradient(circle_at_80%_26%,#0ea5e9_0,transparent_55%),radial-gradient(circle_at_30%_88%,#a855f7_0,transparent_55%),radial-gradient(circle_at_78%_80%,#f97316_0,transparent_55%)]" />
           {/* grid lines */}
-          <div className="absolute inset-0 opacity-45 bg-[linear-gradient(to_right,rgba(148,163,184,0.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[size:26px_26px]" />
+          <div className="absolute inset-0 opacity-40 bg-[linear-gradient(to_right,rgba(148,163,184,0.22)_1px,transparent_1px),linear-gradient(to_bottom,rgba(148,163,184,0.22)_1px,transparent_1px)] bg-[size:26px_26px]" />
           {/* orbit rings */}
           <div className="absolute inset-4 opacity-40 border border-[#38bdf8] rounded-full" />
           <div className="absolute inset-10 opacity-30 border border-[#22c55e] rounded-full" />
@@ -1017,8 +974,8 @@ const App: React.FC = () => {
           {/* label */}
           <div className="relative z-10 flex flex-col items-center justify-center h-full text-[11px]">
             <p className="text-gray-100 mb-1">Mesh bubble map placeholder</p>
-            <p className="text-gray-500 text-center px-4">
-              Wallet bubbles, path trails & snipes later · this is the holo background playground.
+            <p className="text-gray-500">
+              Wallet bubbles, path trails & snipes later · UI first.
             </p>
           </div>
         </div>
@@ -1317,9 +1274,7 @@ const App: React.FC = () => {
             </div>
             <div>
               <p className="text-sm text-white font-semibold">@spawniz</p>
-              <p className="text-[11px] text-gray-400">
-                {meshRoleLabel(meshRole)} · Base · Tiny Legends · SpawnEngine
-              </p>
+              <p className="text-[11px] text-gray-400">Base · Tiny Legends · SpawnEngine</p>
             </div>
           </div>
           <div className="grid sm:grid-cols-3 gap-2 text-[11px]">
@@ -1332,226 +1287,48 @@ const App: React.FC = () => {
               <p className="text-sm text-white font-semibold">{xp}</p>
             </div>
             <div className="px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827]">
-              <p className="text-gray-400 mb-0.5">Tiny achievements</p>
-              <p className="text-sm text-white font-semibold">Coming UI</p>
+              <p className="text-gray-400 mb-0.5">Mesh role</p>
+              <p className="text-sm text-white font-semibold">
+                {role ? roleLabel(role) : 'Not set'}
+              </p>
             </div>
           </div>
           <p className="text-[11px] text-gray-500 mt-2">
             This page will later show exact Tiny Legends sets, foil pulls, mythics and card stats for your wallet.
           </p>
-          <button
-            onClick={() => setShowRoleModal(true)}
-            className="mt-3 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-[11px] text-gray-200 hover:border-[#00FFC0]"
-          >
-            <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
-            Change mesh role
-          </button>
         </HoloCard>
 
         <HoloCard>
           <p className="text-xs text-gray-300 font-semibold mb-1">Gamification summary</p>
           <ul className="text-[11px] text-gray-400 space-y-1 list-disc ml-4">
-            <li>XP från quests, packs, SupCast, jackpots, trading.</li>
-            <li>Trophies från key moments (första mythic, jackpot, stora quests).</li>
-            <li>Rep från SupCast support & clean trading.</li>
+            <li>XP from: quests, packs, SupCast, jackpots, trading.</li>
+            <li>Trophies from key moments (first mythic, jackpot, big quests).</li>
+            <li>Rep from SupCast support & clean trading.</li>
           </ul>
         </HoloCard>
       </div>
     </div>
   );
 
-  // *** NY INSTÄLLNINGS-FLIK (SETTINGS) ***
-  const SettingsTab = () => (
-    <div className="space-y-4">
-        <h2 className="text-sm font-semibold text-white flex items-center gap-2">
-            <Settings className="w-4 h-4 text-[#7dd3fc]" />
-            Settings & Integrations (Pillars)
-        </h2>
-        
-        {/* Profile Card / Header */}
-        <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-lg font-bold text-black shadow-lg">
-                S
-            </div>
-            <div>
-                <p className="text-sm text-white font-semibold">@spawniz</p>
-                <p className="text-[11px] text-gray-400">Mesh ID: {meshRoleLabel(meshRole)}</p>
-            </div>
-            <span className="px-2 py-0.5 rounded-full bg-emerald-700/50 border border-emerald-500 text-[10px] text-white font-semibold flex items-center gap-1">
-                <div className="w-2 h-2 rounded-full bg-emerald-400" />
-                Mesh v1.0 PRO
-            </span>
-        </div>
-
-        {/* Wallet Management (Dina önskemål) */}
-        <HoloCard>
-            <h3 className="text-xs font-semibold text-[#00FFC0] mb-2">Wallet Management</h3>
-            <p className="text-[11px] text-gray-400 mb-2">
-                Manage which wallet is currently used for transactions and identity.
-            </p>
-            <div className="space-y-2 text-[11px]">
-                <button className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#00FFC0]">
-                    <span>Current Active: 0x...64AB (MetaMask)</span>
-                    <Coins className="w-4 h-4 text-[#00FFC0]" />
-                </button>
-                <button className="w-full text-left flex items-center justify-between px-3 py-2 rounded-lg bg-[#020617] border border-[#111827] hover:border-[#a855f7]">
-                    <span>Swap / Connect New Wallet</span>
-                    <Wallet className="w-4 h-4 text-[#a855f7]" />
-                </button>
-            </div>
-        </HoloCard>
-
-        {/* XP SDK & Integration (Pillar 1) */}
-        <HoloCard>
-            <h3 className="text-xs font-semibold text-[#7dd3fc] mb-2">XP SDK & API (Pillar 1)</h3>
-            <p className="text-[11px] text-gray-400 mb-3">
-                Generate and manage API keys to integrate SpawnEngine XP into your external apps or frames.
-            </p>
-            <div className="flex items-center gap-2">
-                <input 
-                    type="text" 
-                    readOnly 
-                    value="sk-spawniz-r82BfA-mock"
-                    className="flex-grow px-2 py-1.5 rounded-lg bg-[#020617] border border-[#111827] text-[11px] text-gray-300 font-mono"
-                />
-                <button className="py-1.5 px-3 rounded-lg text-[11px] font-semibold bg-sky-600/30 text-sky-300 border border-sky-600 hover:bg-sky-600/50">
-                    Regenerate
-                </button>
-            </div>
-        </HoloCard>
-
-        {/* Premium Mesh Filters (Pillar 4) */}
-        <HoloCard>
-            <h3 className="text-xs font-semibold text-[#a855f7] mb-2">Premium Mesh Filters (Pillar 4)</h3>
-            <p className="text-[11px] text-gray-400 mb-3">
-                Unlock Alpha Hunters and Whale Tracking features. Requires 500 SPN staking.
-            </p>
-            <button className="w-full py-2 rounded-lg text-[11px] font-semibold bg-violet-600/60 text-white border border-violet-600 hover:bg-violet-600/80">
-                Upgrade to Mesh Pro Tier
-            </button>
-        </HoloCard>
-
-        {/* Manage Notifications */}
-        <HoloCard>
-            <button className="w-full py-2 rounded-lg text-[11px] font-semibold bg-[#020617] text-white border border-[#111827] hover:border-[#00FFC0]">
-                Manage Push & Email Notifications
-            </button>
-        </HoloCard>
-    </div>
-  );
-  // *** SLUT NY INSTÄLLNINGS-FLIK ***
-
-
-  // Role modal (högt upp som på skärmen)
-  const RoleModal: React.FC = () => {
-    if (!showRoleModal) return null;
-
-    const RoleCard: React.FC<{
-      id: MeshRole;
-      title: string;
-      desc: string;
-      icon: React.ReactNode;
-    }> = ({ id, title, desc, icon }) => {
-      const active = pendingRole === id;
-      return (
-        <button
-          onClick={() => setPendingRole(id)}
-          className={`text-left rounded-xl border px-2.5 py-2 flex flex-col gap-1 transition ${
-            active
-              ? 'border-[#00FFC0] bg-[#00FFC0]/10 shadow-[0_0_20px_rgba(0,255,192,0.35)]'
-              : 'border-[#111827] bg-[#020617] hover:border-[#7dd3fc]'
-          }`}
-        >
-          <div className="flex items-center gap-1.5 text-[11px]">
-            {icon}
-            <span className="text-gray-100 font-semibold">{title}</span>
-          </div>
-          <p className="text-[10px] text-gray-400">{desc}</p>
-        </button>
-      );
-    };
-
-    return (
-      <div className="fixed inset-0 z-30 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm pb-24 sm:pb-0">
-        <div className="w-full max-w-lg px-3">
-          <HoloCard>
-            <button
-              onClick={() => setShowRoleModal(false)}
-              className="absolute right-3 top-2 text-gray-500 text-sm hover:text-gray-300"
-            >
-              ×
-            </button>
-            <h3 className="text-sm font-semibold text-white mb-1">Choose your role</h3>
-            <p className="text-[11px] text-gray-400 mb-3">
-              This sets your XP path, quests and how you appear in mesh.
-            </p>
-            <div className="grid grid-cols-2 gap-2 text-[11px] mb-3">
-              <RoleCard
-                id="dev"
-                title="Dev / Builder"
-                desc="Deploy contracts, write miniapps, infra wizard."
-                icon={<Code2 className="w-3.5 h-3.5 text-emerald-300" />}
-              />
-              <RoleCard
-                id="creator"
-                title="Creator / Artist"
-                desc="Packs, cards, tokens, art drops, onchain worlds."
-                icon={<Palette className="w-3.5 h-3.5 text-pink-300" />}
-              />
-              <RoleCard
-                id="alpha"
-                title="Alpha hunter"
-                desc="PnL, tokens, packs, XP races, sniping heat."
-                icon={<Radar className="w-3.5 h-3.5 text-sky-300" />}
-              />
-              <RoleCard
-                id="collector"
-                title="Collector / Fan"
-                desc="Open packs, complete sets, foil raids & quests."
-                icon={<HeartHandshake className="w-3.5 h-3.5 text-yellow-300" />}
-              />
-            </div>
-            <button
-              onClick={() => {
-                setMeshRole(pendingRole);
-                setShowRoleModal(false);
-                addXP(12);
-              }}
-              className="w-full py-2 rounded-xl bg-gradient-to-r from-[#00FFC0] via-[#22d3ee] to-[#a855f7] text-xs font-semibold text-black shadow-lg hover:brightness-110"
-            >
-              Save role
-            </button>
-          </HoloCard>
-        </div>
-      </div>
-    );
-  };
-
   return (
-    // BYT UT KLASSEN HÄR: använder holo-mesh-bg klassen från index.html
-    <div className="min-h-screen holo-mesh-bg text-gray-100"> 
+    <div className="min-h-screen bg-[#020617] text-gray-100">
       <div className="max-w-6xl mx-auto px-3 sm:px-4 py-4">
         {/* header */}
         <header className="flex flex-col md:flex-row md:items-center md:justify-between gap-3 mb-4">
-          
-          {/* GÖR DETTA KLICKBART FÖR PROFIL */}
-          <button 
-            onClick={() => setActiveTab('profile')} 
-            className="flex items-center gap-3 text-left hover:opacity-80 transition"
-          >
+          <div className="flex items-center gap-3">
             <div className="w-9 h-9 rounded-2xl bg-gradient-to-br from-[#00FFC0] via-[#22d3ee] to-[#a855f7] flex items-center justify-center text-xs font-bold text-black shadow-lg">
               SE
             </div>
             <div>
               <p className="text-xs text-gray-500 uppercase tracking-[0.2em]">SpawnEngine</p>
               <p className="text-sm text-white font-semibold">
-                Home for everything onchain · Base creator OS
+                Mesh HUD for everything onchain · Base creator OS
               </p>
             </div>
-          </button>
+          </div>
 
-          {/* right side + settings button (utan dropdown) */}
-          <div className="flex items-center gap-2 text-xs">
+          {/* right side + settings dropdown */}
+          <div className="relative flex items-center gap-2 text-xs">
             <div className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b]">
               <Wallet className="w-3.5 h-3.5 text-[#00FFC0]" />
               <span className="text-gray-300">Wallet: not connected (UI only)</span>
@@ -1561,14 +1338,72 @@ const App: React.FC = () => {
               <span className="text-gray-300">Streak {streakDays}d</span>
             </div>
 
-            {/* settings button, länkar direkt till fliken */}
+            {/* settings button */}
             <button
-              onClick={() => setActiveTab('settings')}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#7dd3fc]"
+              onClick={() => setShowSettings((prev) => !prev)}
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-[#020617] border border-[#1b1f2b] text-gray-300 hover:border-[#00FFC0]"
             >
               <Settings className="w-3.5 h-3.5 text-[#7dd3fc]" />
               <span>Settings</span>
             </button>
+
+            {/* dropdown */}
+            {showSettings && (
+              <div className="absolute right-0 top-11 w-56 rounded-2xl bg-[#020617] border border-[#1f2937] shadow-xl z-20 text-[11px]">
+                <div className="px-3 py-2 border-b border-[#111827]">
+                  <p className="text-gray-300 font-semibold">SpawnEngine OS</p>
+                  <p className="text-[10px] text-gray-500">Landing links · mock only (for now)</p>
+                </div>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setShowRoleModal(true);
+                    setShowSettings(false);
+                  }}
+                >
+                  Change mesh role
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('supcast');
+                    setShowSettings(false);
+                  }}
+                >
+                  SupCast · Base help desk
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('loot');
+                    setShowSettings(false);
+                  }}
+                >
+                  Loot & Pull Lab · entropy UI
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('market');
+                    setShowSettings(false);
+                  }}
+                >
+                  Market · tokens & packs index
+                </button>
+                <button
+                  className="w-full text-left px-3 py-2 hover:bg-[#030712]"
+                  onClick={() => {
+                    setActiveTab('mesh');
+                    setShowSettings(false);
+                  }}
+                >
+                  Mesh Explorer · bubble map
+                </button>
+                <div className="px-3 py-2 border-t border-[#111827] text-[10px] text-gray-500">
+                  Later: docs, API keys, miniapp embed code, onchain modules.
+                </div>
+              </div>
+            )}
           </div>
         </header>
 
@@ -1583,12 +1418,108 @@ const App: React.FC = () => {
           <TabButton id="supcast" icon={<MessageCircle className="w-4 h-4" />} label="SupCast" />
           <TabButton id="leaderboard" icon={<Trophy className="w-4 h-4" />} label="Leaders" />
           <TabButton id="profile" icon={<User className="w-4 h-4" />} label="Profile" />
-          <TabButton id="settings" icon={<Settings className="w-4 h-4" />} label="Settings" /> {/* NY KNAPP */}
         </nav>
 
+        {/* role chooser overlay */}
+        {showRoleModal && (
+          <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/40 px-3">
+            <div className="w-full max-w-lg rounded-3xl bg-[#020617] border border-[#1f2937] shadow-2xl p-4 sm:p-5">
+              <div className="flex items-center justify-between mb-2">
+                <p className="text-xs text-gray-300 font-semibold">Choose your role</p>
+                <button
+                  className="text-[11px] text-gray-500 hover:text-gray-300"
+                  onClick={() => setShowRoleModal(false)}
+                >
+                  Close
+                </button>
+              </div>
+              <p className="text-[11px] text-gray-400 mb-3">
+                This sets your XP path, quests and how you appear in mesh. You can change it later from Settings.
+              </p>
+
+              <div className="grid grid-cols-2 gap-2 mb-3 text-[11px]">
+                <button
+                  onClick={() => setPendingRole('dev')}
+                  className={`flex flex-col items-start gap-1 px-2.5 py-2 rounded-2xl border ${
+                    pendingRole === 'dev'
+                      ? 'border-[#00FFC0] bg-[#00FFC0]/10'
+                      : 'border-[#111827] bg-[#020617]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-[#00FFC0]" />
+                    <span className="font-semibold text-gray-100">Dev / Builder</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Deploy contracts, write miniapps, infra wizard.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setPendingRole('creator')}
+                  className={`flex flex-col items-start gap-1 px-2.5 py-2 rounded-2xl border ${
+                    pendingRole === 'creator'
+                      ? 'border-[#7dd3fc] bg-[#1d283a]'
+                      : 'border-[#111827] bg-[#020617]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5 text-yellow-300" />
+                    <span className="font-semibold text-gray-100">Creator / Artist</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Packs, cards, tokens, art drops, onchain worlds.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setPendingRole('alpha')}
+                  className={`flex flex-col items-start gap-1 px-2.5 py-2 rounded-2xl border ${
+                    pendingRole === 'alpha'
+                      ? 'border-[#f97316] bg-[#1f2933]'
+                      : 'border-[#111827] bg-[#020617]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Zap className="w-3.5 h-3.5 text-orange-400" />
+                    <span className="font-semibold text-gray-100">Alpha hunter</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    PnL, tokens, packs, XP races, sniping heat.
+                  </p>
+                </button>
+
+                <button
+                  onClick={() => setPendingRole('collector')}
+                  className={`flex flex-col items-start gap-1 px-2.5 py-2 rounded-2xl border ${
+                    pendingRole === 'collector'
+                      ? 'border-[#a855f7] bg-[#211b34]'
+                      : 'border-[#111827] bg-[#020617]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Coins className="w-3.5 h-3.5 text-[#a855f7]" />
+                    <span className="font-semibold text-gray-100">Collector / Fan</span>
+                  </div>
+                  <p className="text-[10px] text-gray-400">
+                    Open packs, complete sets, foil raids & quests.
+                  </p>
+                </button>
+              </div>
+
+              <button
+                onClick={handleSaveRole}
+                className="w-full py-2.5 rounded-full bg-gradient-to-r from-[#00FFC0] via-[#22d3ee] to-[#a855f7] text-xs font-semibold text-black shadow-lg hover:brightness-110"
+              >
+                Save role
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* content */}
-        <main className="pb-8 space-y-4">
-          {activeTab === 'home' && <HomeTab />}
+        <main className="pb-8 space-y-4 relative z-10">
+          {activeTab === 'home' && <HomeTab role={role} />}
           {activeTab === 'loot' && <LootTab />}
           {activeTab === 'market' && <MarketTab />}
           {activeTab === 'trading' && <TradingTab />}
@@ -1597,190 +1528,10 @@ const App: React.FC = () => {
           {activeTab === 'supcast' && <SupCastTab />}
           {activeTab === 'leaderboard' && <LeaderboardTab />}
           {activeTab === 'profile' && <ProfileTab />}
-          {activeTab === 'settings' && <SettingsTab />} {/* NY FLIK */}
         </main>
       </div>
-
-      {/* choose-role overlay */}
-      <RoleModal />
     </div>
   );
 };
-import React, { useState, createContext, useContext, useRef, useEffect } from 'react';
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom';
-
-// -------------------------------------------------------------
-// 1. Kontext för globalt tillstånd (Tema)
-// -------------------------------------------------------------
-const ThemeContext = createContext();
-
-// Hook för att använda temakontexten
-const useTheme = () => useContext(ThemeContext);
-
-// -------------------------------------------------------------
-// 2. Mesh Bubble Bakgrund (Visuell Effekt)
-// -------------------------------------------------------------
-// OBS: För en riktigt cool effekt, se CSS-instruktionerna nedan!
-const MeshBackground = () => (
-    <div className="mesh-background">
-        {/* Simulering av ett coolt, bubblande mesh-nät */}
-        <div className="bubble-1"></div>
-        <div className="bubble-2"></div>
-        <div className="bubble-3"></div>
-    </div>
-);
-
-// -------------------------------------------------------------
-// 3. Inställnings Dropdown (Kugghjulet)
-// -------------------------------------------------------------
-const SettingsDropdown = () => {
-    const { theme, toggleTheme } = useTheme();
-    const [isOpen, setIsOpen] = useState(false);
-    const dropdownRef = useRef(null);
-
-    // Stänger rullgardinen när man klickar utanför
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
-                setIsOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [dropdownRef]);
-
-    return (
-        <div className="settings-container" ref={dropdownRef}>
-            {/* Kugghjuls-ikon (Trigger) */}
-            <button 
-                className="settings-trigger" 
-                onClick={() => setIsOpen(!isOpen)}
-                aria-label="Öppna inställningar"
-            >
-                ⚙️
-            </button>
-
-            {/* Dropdown-innehåll (Rullgardinsmeny) */}
-            {isOpen && (
-                <div className="dropdown-menu">
-                    <h4 className="dropdown-title">Inställningar</h4>
-                    
-                    <div className="setting-item">
-                        <span>Tema:</span>
-                        <button onClick={toggleTheme} className="theme-toggle-btn">
-                            {theme === 'light' ? '☀️ Ljust' : '🌙 Mörkt'}
-                        </button>
-                    </div>
-
-                    <Link to="/about" className="setting-item link" onClick={() => setIsOpen(false)}>
-                        ℹ️ Om Appen
-                    </Link>
-                </div>
-            )}
-        </div>
-    );
-};
-
-// -------------------------------------------------------------
-// 4. Header & Navigering
-// -------------------------------------------------------------
-const Header = () => {
-    return (
-        <header className="main-header">
-            <Link to="/" className="logo">
-                ✨ SpawnEngine Mesh App
-            </Link>
-            <nav className="main-nav">
-                <Link to="/data">Data Översikt</Link>
-                <Link to="/about">Om Oss</Link>
-                <SettingsDropdown /> {/* Kugghjulet är här! */}
-            </nav>
-        </header>
-    );
-};
-
-// -------------------------------------------------------------
-// 5. Sidkomponenter
-// -------------------------------------------------------------
-
-// Startsidan (Landningssidan - standard "/")
-const HomePage = () => {
-    const { theme } = useTheme();
-    return (
-        <div className="page-content center-content">
-            <h1 style={{ color: theme === 'dark' ? '#00eaff' : '#333' }}>
-                Välkommen till SpawnEngine
-            </h1>
-            <p className="subtitle">
-                Ett modernt gränssnitt för dynamisk dataanalys.
-            </p>
-            <Link to="/data" className="cta-button">
-                STARTA ANALYS
-            </Link>
-        </div>
-    );
-};
-
-// Data sida (Placeholder)
-const DataPage = () => {
-    return (
-        <div className="page-content">
-            <h2>📊 Dynamisk Dataöversikt</h2>
-            <p>Här renderas dina interaktiva grafer och realtidsdata.</p>
-            <div className="data-box">
-                <p>⚙️ Din data är nu implementerad och klar för presentation!</p>
-            </div>
-        </div>
-    );
-};
-
-// Om Oss sida (Placeholder)
-const AboutPage = () => {
-    return (
-        <div className="page-content">
-            <h2>ℹ️ Om Projektet</h2>
-            <p>Denna applikation byggdes supersnabbt med Vite, React och lite magi!</p>
-            <p>Version: 1.0.0 (Klar)</p>
-        </div>
-    );
-};
-
-// -------------------------------------------------------------
-// 6. Huvudapplikationen
-// -------------------------------------------------------------
-
-const App = () => {
-    const [theme, setTheme] = useState('dark'); // Startar i mörkt läge (coolast!)
-
-    const toggleTheme = () => {
-        setTheme(currentTheme => (currentTheme === 'light' ? 'dark' : 'light'));
-    };
-
-    return (
-        <ThemeContext.Provider value={{ theme, toggleTheme }}>
-            <Router>
-                <div className={`app-container ${theme}-theme`}>
-                    <MeshBackground /> {/* Lägger bakgrunden överallt */}
-                    <Header />
-                    
-                    <main className="main-content-area">
-                        <Routes>
-                            {/* Startsidan är rot-vägen (/) - Ingen egen flik behövs */}
-                            <Route path="/" element={<HomePage />} /> 
-                            <Route path="/data" element={<DataPage />} />
-                            <Route path="/about" element={<AboutPage />} />
-                            
-                            {/* Inställningssidan (kan läggas till, men rullgardinen räcker) */}
-                            {/* <Route path="/settings" element={<SettingsPage />} /> */}
-                        </Routes>
-                    </main>
-                    
-                </div>
-            </Router>
-        </ThemeContext.Provider>
-    );
-};
-
-export default App;
 
 export default App;
