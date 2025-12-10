@@ -507,6 +507,136 @@ const App: React.FC = () => {
       />
     </div>
   );
+// Lägg till efter SpawnSlotMegaways, men före App:s main component
+
+// 5. ZORA COIN TRACKER CARD (För Market View)
+const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
+    const isPositive = change >= 0;
+    const historyData = [10, 15, 12, 18, 25, 20, 30, 22, 28, 35, 32, 40].map(val => val + (isPositive ? 0 : 5)); // Mock data
+    
+    // Simulerad "mini-graf" (Visuellt baserat på text/färg)
+    const Sparkline = () => (
+        <div className="h-8 w-20 flex items-end overflow-hidden relative">
+            {historyData.map((val, i) => (
+                <div 
+                    key={i} 
+                    className={`flex-1 mx-[0.5px] rounded-t-sm transition-all duration-300`}
+                    style={{ 
+                        height: `${(val / 40) * 100}%`, // Skala höjden
+                        backgroundColor: isPositive ? 'rgba(0, 255, 192, 0.7)' : 'rgba(239, 68, 68, 0.7)'
+                    }}
+                />
+            ))}
+        </div>
+    );
+    
+    return (
+        <HoloCard className={`p-4 border-mesh-neon/30 ${isPositive ? 'shadow-[0_0_10px_rgba(0,255,192,0.2)]' : 'shadow-[0_0_10px_rgba(239,68,68,0.2)]'}`}>
+            <div className="flex justify-between items-start mb-2">
+                <div>
+                    <div className="text-lg font-black text-white">{name}</div>
+                    <div className="text-xs text-gray-500 font-mono">@{ticker} · Zora Protocol</div>
+                </div>
+                <div className="text-right">
+                    <div className="text-base font-bold text-white">{price} ETH</div>
+                    <div className={`text-xs font-mono font-bold ${isPositive ? 'text-mesh-neon' : 'text-danger'}`}>
+                        {isPositive ? '+' : ''}{change.toFixed(2)}%
+                    </div>
+                </div>
+            </div>
+            
+            <div className="flex justify-between items-center pt-3 border-t border-white/5">
+                <div className="flex items-center gap-2">
+                    <Users size={16} className="text-gray-500" />
+                    <span className="text-sm text-gray-400">Holders: {holders}</span>
+                </div>
+                <Sparkline />
+            </div>
+            
+            <button className="w-full mt-4 py-2 text-sm font-bold rounded-lg bg-purple-500/30 text-purple-400 border border-purple-500/50 hover:bg-purple-500/50 transition-colors">
+                Trade on Mesh DEX
+            </button>
+        </HoloCard>
+    );
+};
+
+
+// I MarketView-funktionen:
+
+// ... (Inom App: React.FC)
+// ... (Tidigare funktioner som HomeView, LootView, etc.)
+
+
+const MarketView = () => {
+    // Mock Data för Market
+    const MOCK_ZORA_COINS = [
+        { name: "SpawnEngine Vibe", ticker: "SEVZ", price: 0.005, change: 8.45, holders: "5.1K" },
+        { name: "Base Builder DAO", ticker: "BDAO", price: 0.012, change: -3.11, holders: "2.8K" },
+    ];
+    
+    const [activeMarketSubTab, setActiveMarketSubTab] = useState<'trending' | 'creators' | 'zora'>('trending'); // Ny state för Market
+
+    return (
+        <div className="space-y-5 animate-fade-in">
+            <PlatformHeader title="Market" icon={Box} />
+            
+            <SubNav 
+                subTabs={[{id: 'trending', label: 'Trending'}, {id: 'creators', label: 'Creators'}, {id: 'zora', label: 'Zora Coins'}]}
+                activeSubTab={activeMarketSubTab}
+                setActiveSubTab={setActiveMarketSubTab}
+            />
+
+            {/* --- TRENDING VIEW --- */}
+            {activeMarketSubTab === 'trending' && (
+                <>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <TrendingUp size={16} className="text-red-500" /> HOT TRENDING (Drops)
+                    </h3>
+                    <div className="space-y-3">
+                        {[{name: "VibeMarket Booster", price: "0.025 ETH", participants: "1.2K"},
+                          {name: "Creator Token · $SPAWNIZ", price: "0.001 ETH", participants: "500"}]
+                          .map((item, i) => (
+                            <HoloCard key={i} className="p-3 flex justify-between items-center cursor-pointer hover:border-red-500/50">
+                              <div>
+                                <div className="text-sm font-bold text-white">{item.name}</div>
+                                <div className="text-[10px] text-gray-400">P: {item.participants} | {item.price}</div>
+                              </div>
+                              <button className="px-3 py-1 text-xs rounded-full bg-mesh-neon text-black font-bold">
+                                VIEW
+                              </button>
+                            </HoloCard>
+                          ))}
+                    </div>
+                </>
+            )}
+
+            {/* --- ZORA COINS VIEW --- */}
+            {activeMarketSubTab === 'zora' && (
+                <div className="space-y-4">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Coins size={16} className="text-purple-400" /> TOP CREATOR COINS
+                    </h3>
+                    {MOCK_ZORA_COINS.map((coin, i) => (
+                        <ZoraCoinTrackerCard key={i} {...coin} />
+                    ))}
+                </div>
+            )}
+            
+            {/* --- CREATORS VIEW (Placeholder) --- */}
+            {activeMarketSubTab === 'creators' && (
+                <HoloCard className="p-4 border-cyan-500/50 text-center">
+                    <h3 className="text-lg font-bold text-cyan-400">Creator Hub</h3>
+                    <p className="text-sm text-gray-400 mt-2">Discover, Follow, and Support Top Mesh Builders.</p>
+                    <button className="mt-4 px-4 py-2 text-sm rounded-full bg-cyan-500/20 text-cyan-400 border border-cyan-500/50">
+                        View Creator Leaderboard
+                    </button>
+                </HoloCard>
+            )}
+        </div>
+    );
+};
+
+// ... (Resten av App-komponenten)
 
   const HistoryView = () => (
     <div className="space-y-3">
