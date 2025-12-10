@@ -69,8 +69,7 @@ const GasMeter = () => {
   }, []);
 
   const color = gwei < 0.2 ? 'text-emerald-400' : gwei < 0.5 ? 'text-yellow-400' : 'text-red-400';
-  const barWidth = Math.min(100, (gwei / 0.8) * 100);
-
+  
   return (
     <div className="flex flex-col gap-1 w-20">
       <div className="flex items-center gap-1">
@@ -81,7 +80,7 @@ const GasMeter = () => {
   );
 };
 
-// 4. SPAWNENGINE MEGAWAYS SLOT V3.0
+// 4. SPAWNENGINE MEGAWAYS SLOT V4.0 (MED DYNAMISK STORLEK OCH $S SCATTER)
 interface SlotResult {
     payout: number;
     win: boolean;
@@ -89,21 +88,21 @@ interface SlotResult {
 }
 
 const SYMBOLS = {
-    // Symbol | Payout (per match 5) | Color | Icon
-    'SE': { payout: 1000, color: 'text-mesh-neon', icon: <Gem size={32} className="text-mesh-neon" /> }, // Wild/High
-    '⚔️': { payout: 500, color: 'text-red-500', icon: <Sword size={32} className="text-red-500" /> }, // High
-    '7️⃣': { payout: 250, color: 'text-amber-400', icon: '7️⃣' }, // Medium
-    '💎': { payout: 100, color: 'text-purple-400', icon: <Gem size={32} className="text-purple-400" /> }, // Low
-    '📦': { payout: 0, color: 'text-gray-500', icon: <Box size={32} className="text-gray-500" /> }, // Empty/Low
-    'FS': { payout: 0, color: 'text-cyan-400', icon: <Gift size={32} className="text-cyan-400" />, freeSpin: true }, // Free Spin Trigger
+    // Symbol | Payout (per match 5) | Color | Icon | Scatter
+    '$S': { payout: 1000, color: 'text-mesh-neon', icon: <DollarSign size={32} className="text-mesh-neon" />, scatter: true }, // SpawnToken / Scatter
+    '⚔️': { payout: 500, color: 'text-red-500', icon: <Sword size={32} className="text-red-500" />, scatter: false }, // High
+    '7️⃣': { payout: 250, color: 'text-amber-400', icon: '7️⃣', scatter: false }, // Medium
+    '💎': { payout: 100, color: 'text-purple-400', icon: <Gem size={32} className="text-purple-400" />, scatter: false }, // Low
+    '📦': { payout: 0, color: 'text-gray-500', icon: <Box size={32} className="text-gray-500" />, scatter: false }, // Low
 };
 const SYMBOL_KEYS = Object.keys(SYMBOLS);
 const BET_COST = 500;
 const MAX_REELS = 5;
 
 // Funktion för att slumpa fram symboler
-const rollSymbol = (isFSReel = false) => {
-    const weights = isFSReel ? [0.6, 0.2, 0.1, 0.05, 0.02, 0.03] : [0.05, 0.15, 0.25, 0.25, 0.2, 0.1]; // Lättare att få FS på sista hjulet
+const rollSymbol = () => {
+    // Justerar vikter för att göra Scatter ($S) lite mer sällsynt men inte omöjligt
+    const weights = [0.08, 0.15, 0.2, 0.25, 0.32]; // $S, ⚔️, 7️⃣, 💎, 📦
     const rand = Math.random();
     let cumulativeWeight = 0;
     
@@ -113,25 +112,38 @@ const rollSymbol = (isFSReel = false) => {
             return SYMBOL_KEYS[i];
         }
     }
-    return SYMBOL_KEYS[SYMBOL_KEYS.length - 1]; // Fallback
+    return SYMBOL_KEYS[SYMBOL_KEYS.length - 1]; // Fallback (📦)
 };
 
-// Enkel Reel komponent för att visualisera Megaways
-const Reel = ({ symbol, spinning }: { symbol: string, spinning: boolean }) => {
-    const symbolData = SYMBOLS[symbol as keyof typeof SYMBOLS] || SYMBOLS['📦'];
-    
-    // Använder Emoji för enkla symboler, Lucide ikoner för andra
-    const content = (typeof symbolData.icon === 'string' ? symbolData.icon : symbolData.icon) || symbol;
+// Reel komponent som visar en stapel med symboler (Megaways-känslan)
+const Reel = ({ symbols, reelHeight, spinning }: { symbols: string[], reelHeight: number, spinning: boolean }) => {
+    // Använder en statisk symbol per 'drop' för enkelheten, men visuellt staplar vi dem
+    const mainSymbol = symbols[Math.floor(symbols.length / 2)] || '📦';
+    const symbolData = SYMBOLS[mainSymbol as keyof typeof SYMBOLS] || SYMBOLS['📦'];
+    const content = (typeof symbolData.icon === 'string' ? symbolData.icon : symbolData.icon) || mainSymbol;
+    const isScatter = symbolData.scatter;
+
+    // Dynamisk höjd baserat på reelHeight (Megaways-effekt)
+    const heightClass = `h-[${reelHeight * 25}px] min-h-[75px] max-h-[175px]`; // 3x25=75px (min 3 symboler) till 7x25=175px (max 7 symboler)
 
     return (
         <div 
-            className={`flex-1 h-14 sm:h-20 flex items-center justify-center bg-[#111] rounded-lg border-2 border-gray-700
-                        transition-transform duration-100 ease-linear ${spinning ? 'opacity-50 blur-[2px]' : 'opacity-100'} 
-                        text-2xl sm:text-4xl shadow-inner`}
+            style={{ height: `${reelHeight * 32}px` }} // Ökad storlek för bättre mobilvisning
+            className={`flex-1 flex flex-col items-center justify-center bg-[#070707] rounded-lg border-2 
+                        transition-transform duration-100 ease-linear ${spinning ? 'opacity-50 blur-[2px] border-gray-900' : 'opacity-100 border-gray-700'} 
+                        text-2xl sm:text-4xl shadow-inner overflow-hidden relative`}
         >
-            <span className={`${symbolData.color} ${!spinning ? 'text-glow' : ''}`}>
-                {content}
-            </span>
+            <div className={`text-center transition-all duration-300 ${spinning ? 'translate-y-0' : 'translate-y-0'}`}>
+                 <span className={`${symbolData.color} ${!spinning ? (isScatter ? 'text-glow-fs' : 'text-glow') : ''} ${isScatter ? 'text-5xl font-extrabold' : 'text-4xl'}`}>
+                    {content}
+                </span>
+                <span className="text-[10px] text-gray-500 block mt-1">{reelHeight} Ways</span>
+            </div>
+
+            {/* Neon Border för Scatter symbolen */}
+            {isScatter && !spinning && (
+                <div className="absolute inset-0 border-4 border-mesh-neon rounded-lg animate-pulse pointer-events-none"></div>
+            )}
         </div>
     );
 };
@@ -144,29 +156,40 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
     onSpin: (result: SlotResult) => void
 }) => {
     const [spinning, setSpinning] = useState(false);
-    const [slots, setSlots] = useState<string[]>(Array(MAX_REELS).fill('SE'));
-    const [message, setMessage] = useState(`BET: ${BET_COST} SE. Try to match 3+!`);
+    const [reels, setReels] = useState<string[][]>(Array(MAX_REELS).fill(null).map(() => Array(5).fill('$S')));
+    const [reelHeights, setReelHeights] = useState<number[]>(Array(MAX_REELS).fill(5));
+    const [message, setMessage] = useState(`BET: ${BET_COST} SE. Match 3+ or land 3x $S for FS!`);
     const [error, setError] = useState('');
     const [multiplier, setMultiplier] = useState(1);
+    
+    // Antal symboler per hjul (3-7, Megaways-känslan)
+    const generateReelHeight = () => Math.floor(Math.random() * 5) + 3; // 3 till 7
 
     const hasFreeSpin = freeSpins > 0;
     const canSpin = hasFreeSpin || seTokens >= BET_COST;
 
-    const calculateResult = (rolls: string[]): SlotResult => {
+    const calculateResult = (finalReels: string[][]): SlotResult => {
+        const flatSymbols = finalReels.flat(); // Samtliga symboler på skärmen (för scatter och matchning)
+        
+        // 1. SCATTER / FREE SPIN LOGIC ($S)
+        const scatterCount = flatSymbols.filter(s => SYMBOLS[s as keyof typeof SYMBOLS].scatter).length;
+        const freeSpinTriggered = scatterCount >= 3;
+        
+        // 2. PAYOUT LOGIC (förenklat: match 3+ av en symbol någonstans på skärmen)
         let payout = 0;
-        let freeSpinTriggered = rolls.filter(r => r === 'FS').length >= 3;
-
-        // Förenklad Match 3, 4 eller 5 Logik
-        const counts: { [key: string]: number } = rolls.reduce((acc, symbol) => {
-            if (symbol !== 'FS' && symbol !== '📦') {
+        let win = false;
+        
+        const counts: { [key: string]: number } = flatSymbols.reduce((acc, symbol) => {
+            if (symbol !== '$S' && symbol !== '📦') { // Uteslut Scatter och Empty för vanlig vinst
                 acc[symbol] = (acc[symbol] || 0) + 1;
             }
             return acc;
         }, {});
-
+        
         for (const symbol in counts) {
             const count = counts[symbol];
             if (count >= 3) {
+                win = true;
                 const basePayout = SYMBOLS[symbol as keyof typeof SYMBOLS].payout;
                 let winMultiplier = 0;
                 if (count === 3) winMultiplier = 0.5;
@@ -179,7 +202,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
         
         return { 
             payout: Math.round(payout * multiplier), 
-            win: payout > 0, 
+            win: win, 
             freeSpinTriggered 
         };
     };
@@ -190,7 +213,9 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
             return;
         }
         setError('');
-        setMultiplier(p => hasFreeSpin ? p : 1); // Återställ multiplikatorn om det inte är Freespin
+        
+        // Återställ multiplikatorn om det inte är Freespin
+        if (!hasFreeSpin) setMultiplier(1); 
 
         // Hantera insats/Freespin kostnad
         if (hasFreeSpin) {
@@ -203,31 +228,39 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
         
         setSpinning(true);
         
-        // Generera det faktiska slutresultatet 
-        const finalResult = Array(MAX_REELS).fill(null).map((_, i) => rollSymbol(i === MAX_REELS - 1));
+        // Generera nya hjulhöjder och det faktiska slutresultatet 
+        const newHeights = Array(MAX_REELS).fill(null).map(generateReelHeight);
+        setReelHeights(newHeights);
+
+        const finalReels = newHeights.map(height => 
+            Array(height).fill(null).map(rollSymbol)
+        );
         
         let iterations = 0;
         const spinInterval = setInterval(() => {
-            setSlots(Array(MAX_REELS).fill(null).map(() => rollSymbol()));
+            // Under spinning, visa slumpmässiga symboler
+            setReels(newHeights.map(height => 
+                Array(height).fill(null).map(rollSymbol)
+            ));
             iterations++;
             
             if (iterations > 30) {
                 clearInterval(spinInterval);
                 
                 // Sätt slutresultatet
-                setSlots(finalResult);
-                const result = calculateResult(finalResult);
+                setReels(finalReels);
+                const result = calculateResult(finalReels);
                 
                 // Hantera utbetalning/vinst
-                if (result.payout > 0) {
-                    setSeTokens(s => s + result.payout);
-                    setMessage(`BIG WIN! +${result.payout} SE Tokens! (x${multiplier})`);
-                    if (!hasFreeSpin) setMultiplier(m => m + 1); // Öka Multiplikatorn vid vinst (för FreeSpins eller nästa runda)
-                } else if (result.freeSpinTriggered) {
+                if (result.freeSpinTriggered) {
                     const newFS = 5;
                     setFreeSpins(f => f + newFS);
-                    setMessage(`FREE SPINS! You won ${newFS} spins! 💥`);
+                    setMessage(`💥 MEGAWAY SCATTER WIN! +${newFS} FREE SPINS! 💥`);
                     setMultiplier(2); // Starta Freespin med x2 multiplikator
+                } else if (result.payout > 0) {
+                    setSeTokens(s => s + result.payout);
+                    setMessage(`BIG WIN! +${result.payout} SE Tokens! (x${multiplier})`);
+                    if (!hasFreeSpin) setMultiplier(m => m + 1); // Öka Multiplikatorn vid vinst (för nästa runda)
                 } else {
                     setMessage('NO MATCH - Try again');
                     if (!hasFreeSpin) setMultiplier(1);
@@ -238,6 +271,24 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
             }
         }, 60);
     };
+
+    // Anpassad CSS för Neon Scatter Glow
+    useEffect(() => {
+        const style = document.createElement('style');
+        style.type = 'text/css';
+        style.innerHTML = `
+            @keyframes glow-fs {
+                0%, 100% { box-shadow: 0 0 10px rgba(0, 255, 192, 0.5), 0 0 20px rgba(0, 255, 192, 0.3); }
+                50% { box-shadow: 0 0 15px rgba(0, 255, 192, 0.8), 0 0 30px rgba(0, 255, 192, 0.5); }
+            }
+            .text-glow-fs {
+                text-shadow: 0 0 10px rgba(0, 255, 192, 0.7);
+                animation: glow-fs 1.5s ease-in-out infinite;
+            }
+        `;
+        document.head.appendChild(style);
+        return () => { document.head.removeChild(style); };
+    }, []);
 
     return (
         <div className="relative p-1 rounded-3xl bg-gradient-to-b from-purple-700 to-blue-800 shadow-2xl border-4 border-mesh-neon/50">
@@ -265,8 +316,8 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
 
                     {/* Reels */}
                     <div className="flex-1 flex justify-between gap-1.5 p-1 bg-[#090909] rounded-lg border-2 border-gray-800 shadow-inner">
-                        {slots.map((s, i) => (
-                            <Reel key={i} symbol={s} spinning={spinning} />
+                        {reels.map((symbols, i) => (
+                            <Reel key={i} symbols={symbols} reelHeight={reelHeights[i]} spinning={spinning} />
                         ))}
                     </div>
 
@@ -706,22 +757,36 @@ const App: React.FC = () => {
             </button>
           </div>
 
+          {/* New Settings UI from image */}
           <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <Wallet className="w-5 h-5 text-mesh-neon" />
-                <div>
-                  <div className="text-sm font-bold text-white">Wallet Connection</div>
-                  <div className="text-[10px] text-gray-400 font-mono">0x4A...F89C (Base)</div>
-                </div>
-              </div>
-              <button className="px-3 py-1.5 text-xs font-bold bg-red-500/20 text-red-400 rounded hover:bg-red-500/30">
-                Disconnect
-              </button>
-            </div>
+            <h2 className="text-lg font-bold text-mesh-neon">Settings & API</h2>
             
-            <button className="w-full py-3 rounded-xl bg-mesh-neon text-black font-bold text-sm hover:opacity-90 mt-4">
-                Upgrade to Premium ($9/mo)
+            <HoloCard className="border-mesh-neon/50">
+                <div className="text-sm font-bold text-white mb-1">XP SDK & Integration (Pillar 1)</div>
+                <p className="text-xs text-gray-400 mb-3">Manage API keys to integrate SpawnEngine XP into your own apps.</p>
+                <button className="w-full py-2 rounded bg-mesh-neon text-black font-bold text-sm hover:opacity-90">
+                    Show API Key
+                </button>
+            </HoloCard>
+
+            <HoloCard className="border-purple-500/50">
+                <div className="text-sm font-bold text-white mb-1">Premium Mesh Filters (Pillar 4)</div>
+                <p className="text-xs text-gray-400 mb-3">Unlock Alpha Hunters and Whale Tracking. Requires 500 SPN staking.</p>
+                <button className="w-full py-2 rounded bg-purple-500/20 text-purple-400 border border-purple-500/50 font-bold text-sm hover:bg-purple-500/30">
+                    Upgrade to Premium
+                </button>
+            </HoloCard>
+            
+            <HoloCard className="border-blue-500/50">
+                <div className="text-sm font-bold text-white mb-1">Launchpad Builder (Pillar 8)</div>
+                <p className="text-xs text-gray-400 mb-3">Access the Zero-Code Token/NFT Builder and Bonding Curve configuration.</p>
+                <button className="w-full py-2 rounded bg-blue-500/20 text-blue-400 border border-blue-500/50 font-bold text-sm hover:bg-blue-500/30">
+                    Open Creator Panel
+                </button>
+            </HoloCard>
+            
+            <button className="w-full py-3 rounded-xl bg-white/5 text-gray-300 font-bold text-sm hover:bg-white/10 mt-4">
+                Manage Notifications
             </button>
           </div>
         </div>
