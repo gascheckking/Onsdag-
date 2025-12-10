@@ -1,17 +1,15 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Home, Sword, Box, User, Settings, Zap, 
   Wallet, Trophy, Sparkles, Activity, ArrowRight, 
   Terminal, Cpu, Coins, Flame, RefreshCw,
-  ChevronRight, ExternalLink, ShieldCheck, Ghost, 
-  Target, TrendingUp, HelpCircle, Send, Users, Layers, Star,
-  Lock, GitBranch, Gem, Gift, DollarSign, RotateCw
+  ChevronRight, ExternalLink, ShieldCheck, TrendingUp, HelpCircle, Send, Users, Layers, Star,
+  GitBranch, Gem, Gift, DollarSign, RotateCw, Globe, Target
 } from 'lucide-react';
 
 // --- TYPES & INTERFACES ---
 type MainTab = 'home' | 'loot' | 'market' | 'brain' | 'profile';
 type LootSubTab = 'packs' | 'slot' | 'history';
-type MarketSubTab = 'trending' | 'creators' | 'zora';
 type BrainSubTab = 'quests' | 'ai' | 'supcast';
 
 // --- MOCK DATA GENERATORS ---
@@ -34,6 +32,7 @@ const MOCK_SUPCASTS = [
     { id: 1, title: "Bug: Slot machine lag on low-end mobile", context: "The CSS animations cause stuttering...", category: "SpawnEngine", useCount: 2 },
     { id: 2, title: "Idea: XP Quest for Zora coin holders", context: "We should reward users who hold a Zora Creator Coin...", category: "Zora", useCount: 5 },
 ];
+
 
 // --- COMPONENTS ---
 
@@ -60,7 +59,7 @@ const HoloCard = ({ children, className = "", glow = false, onClick = undefined 
 
 // 3. GAS METER
 const GasMeter = () => {
-  const [gwei, setGwei] = useState(0.05);
+  const [gwei, setGwei] = useState(0.33);
   
   useEffect(() => {
     const interval = setInterval(() => {
@@ -69,202 +68,252 @@ const GasMeter = () => {
     return () => clearInterval(interval);
   }, []);
 
-  const color = gwei < 0.1 ? 'text-emerald-400' : gwei < 0.5 ? 'text-yellow-400' : 'text-red-400';
+  const color = gwei < 0.2 ? 'text-emerald-400' : gwei < 0.5 ? 'text-yellow-400' : 'text-red-400';
   const barWidth = Math.min(100, (gwei / 0.8) * 100);
 
   return (
     <div className="flex flex-col gap-1 w-20">
       <div className="flex items-center gap-1">
         <span className="text-[10px] text-gray-400 font-mono">GAS:</span>
-        <span className={`text-xs font-bold font-mono ${color}`}>{gwei.toFixed(3)}</span>
-      </div>
-      <div className="h-1 w-full bg-gray-800 rounded-full overflow-hidden">
-        <div 
-          className="h-full rounded-full"
-          style={{ width: `${barWidth}%`, backgroundColor: gwei < 0.1 ? '#10b981' : gwei < 0.5 ? '#f59e0b' : '#ef4444' }}
-        />
+        <span className={`text-xs font-bold font-mono ${color}`}>{gwei.toFixed(2)} Gwei</span>
       </div>
     </div>
   );
 };
 
-// 4. SPAWN SLOT V2.0 (Fullt fungerande med token-logik)
+// 4. SPAWNENGINE MEGAWAYS SLOT V3.0
 interface SlotResult {
-    symbols: string[];
     payout: number;
     win: boolean;
-    freeSpin: boolean;
+    freeSpinTriggered: boolean;
 }
 
 const SYMBOLS = {
-    '💎': { payout: 5000, color: 'text-mesh-neon' }, // Jackpot
-    '7️⃣': { payout: 1000, color: 'text-red-500' }, // High
-    '💰': { payout: 500, color: 'text-green-500' }, // Medium
-    '👾': { payout: 200, color: 'text-purple-500' }, // Medium
-    '🍒': { payout: 100, color: 'text-yellow-500' }, // Low (Insatsen tillbaka)
-    '⚡️': { payout: 0, color: 'text-gray-500', freeSpin: true }, // Free Spin
-    'X': { payout: 0, color: 'text-gray-700' }, // Empty/Loss
+    // Symbol | Payout (per match 5) | Color | Icon
+    'SE': { payout: 1000, color: 'text-mesh-neon', icon: <Gem size={32} className="text-mesh-neon" /> }, // Wild/High
+    '⚔️': { payout: 500, color: 'text-red-500', icon: <Sword size={32} className="text-red-500" /> }, // High
+    '7️⃣': { payout: 250, color: 'text-amber-400', icon: '7️⃣' }, // Medium
+    '💎': { payout: 100, color: 'text-purple-400', icon: <Gem size={32} className="text-purple-400" /> }, // Low
+    '📦': { payout: 0, color: 'text-gray-500', icon: <Box size={32} className="text-gray-500" /> }, // Empty/Low
+    'FS': { payout: 0, color: 'text-cyan-400', icon: <Gift size={32} className="text-cyan-400" />, freeSpin: true }, // Free Spin Trigger
 };
 const SYMBOL_KEYS = Object.keys(SYMBOLS);
-const BET_COST = 100;
+const BET_COST = 500;
+const MAX_REELS = 5;
 
-const SlotMachine = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onSpin }: { 
+// Funktion för att slumpa fram symboler
+const rollSymbol = (isFSReel = false) => {
+    const weights = isFSReel ? [0.6, 0.2, 0.1, 0.05, 0.02, 0.03] : [0.05, 0.15, 0.25, 0.25, 0.2, 0.1]; // Lättare att få FS på sista hjulet
+    const rand = Math.random();
+    let cumulativeWeight = 0;
+    
+    for (let i = 0; i < SYMBOL_KEYS.length; i++) {
+        cumulativeWeight += weights[i];
+        if (rand < cumulativeWeight) {
+            return SYMBOL_KEYS[i];
+        }
+    }
+    return SYMBOL_KEYS[SYMBOL_KEYS.length - 1]; // Fallback
+};
+
+// Enkel Reel komponent för att visualisera Megaways
+const Reel = ({ symbol, spinning }: { symbol: string, spinning: boolean }) => {
+    const symbolData = SYMBOLS[symbol as keyof typeof SYMBOLS] || SYMBOLS['📦'];
+    
+    // Använder Emoji för enkla symboler, Lucide ikoner för andra
+    const content = (typeof symbolData.icon === 'string' ? symbolData.icon : symbolData.icon) || symbol;
+
+    return (
+        <div 
+            className={`flex-1 h-14 sm:h-20 flex items-center justify-center bg-[#111] rounded-lg border-2 border-gray-700
+                        transition-transform duration-100 ease-linear ${spinning ? 'opacity-50 blur-[2px]' : 'opacity-100'} 
+                        text-2xl sm:text-4xl shadow-inner`}
+        >
+            <span className={`${symbolData.color} ${!spinning ? 'text-glow' : ''}`}>
+                {content}
+            </span>
+        </div>
+    );
+};
+
+const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onSpin }: { 
     seTokens: number, 
     setSeTokens: (amount: number) => void,
     freeSpins: number,
     setFreeSpins: (amount: number) => void,
     onSpin: (result: SlotResult) => void
 }) => {
-  const [spinning, setSpinning] = useState(false);
-  const [slots, setSlots] = useState(['SE', 'SE', 'SE']);
-  const [message, setMessage] = useState(`BET: ${BET_COST} SE`);
-  const [error, setError] = useState('');
-  
-  const hasFreeSpin = freeSpins > 0;
-  const canSpin = hasFreeSpin || seTokens >= BET_COST;
+    const [spinning, setSpinning] = useState(false);
+    const [slots, setSlots] = useState<string[]>(Array(MAX_REELS).fill('SE'));
+    const [message, setMessage] = useState(`BET: ${BET_COST} SE. Try to match 3+!`);
+    const [error, setError] = useState('');
+    const [multiplier, setMultiplier] = useState(1);
 
-  const calculateResult = (rolls: string[]): SlotResult => {
-      const unique = new Set(rolls);
-      let payout = 0;
-      let win = false;
-      let freeSpin = false;
+    const hasFreeSpin = freeSpins > 0;
+    const canSpin = hasFreeSpin || seTokens >= BET_COST;
 
-      // Logik för 3 i rad
-      if (unique.size === 1) {
-          const symbol = rolls[0];
-          payout = SYMBOLS[symbol as keyof typeof SYMBOLS].payout;
-          win = payout > 0;
-          freeSpin = (symbol === '⚡️');
-          if (freeSpin) payout = 0; // Free spin gives no immediate tokens
-      } 
-      // Logik för 2 '7' eller '💎'
-      else if ((rolls.filter(r => r === '7️⃣').length >= 2)) {
-          payout = 200;
-          win = true;
-      }
-      
-      return { symbols: rolls, payout, win, freeSpin };
-  };
+    const calculateResult = (rolls: string[]): SlotResult => {
+        let payout = 0;
+        let freeSpinTriggered = rolls.filter(r => r === 'FS').length >= 3;
 
-  const handleSpin = () => {
-    if (spinning || !canSpin) {
-      if (!canSpin) setError('Need 100 SE Tokens or a Free Spin!');
-      return;
-    }
-    setError('');
+        // Förenklad Match 3, 4 eller 5 Logik
+        const counts: { [key: string]: number } = rolls.reduce((acc, symbol) => {
+            if (symbol !== 'FS' && symbol !== '📦') {
+                acc[symbol] = (acc[symbol] || 0) + 1;
+            }
+            return acc;
+        }, {});
 
-    // Hantera insats
-    if (hasFreeSpin) {
-        setFreeSpins(freeSpins - 1);
-        setMessage(`FREE SPIN (${freeSpins - 1} left)`);
-    } else {
-        setSeTokens(seTokens - BET_COST); // Ta insatsen
-        setMessage('ROLLING...');
-    }
-    
-    setSpinning(true);
-    
-    // Generera det faktiska slutresultatet (högre chans för 'X')
-    const roll = () => SYMBOL_KEYS[Math.floor(Math.random() * (SYMBOL_KEYS.length - 1))];
-    const finalResult = [roll(), roll(), roll()];
-    
-    let iterations = 0;
-    const interval = setInterval(() => {
-      // Visa slumpmässiga symboler under spinnet
-      setSlots([
-        roll(), roll(), roll()
-      ]);
-      iterations++;
-      
-      if (iterations > 25) {
-        clearInterval(interval);
-        
-        // Sätt slutresultatet
-        setSlots(finalResult);
-        const result = calculateResult(finalResult);
-
-        // Hantera utbetalning/vinst
-        if (result.payout > 0) {
-            setSeTokens(seTokens + result.payout);
-            setMessage(`WINNER! +${result.payout} SE Tokens!`);
-        } else if (result.freeSpin) {
-            setFreeSpins(f => f + 1);
-            setMessage(`FREE SPIN! Get 1 more spin! ⚡️`);
-        } else {
-            setMessage('NO MATCH - Try again');
+        for (const symbol in counts) {
+            const count = counts[symbol];
+            if (count >= 3) {
+                const basePayout = SYMBOLS[symbol as keyof typeof SYMBOLS].payout;
+                let winMultiplier = 0;
+                if (count === 3) winMultiplier = 0.5;
+                if (count === 4) winMultiplier = 1;
+                if (count >= 5) winMultiplier = 3;
+                
+                payout += basePayout * winMultiplier;
+            }
         }
-
-        setSpinning(false);
-        onSpin(result);
-      }
-    }, 80);
-  };
-
-  return (
-    <div className="relative p-1 rounded-2xl bg-gradient-to-b from-purple-500 to-blue-600 shadow-lg">
-      <div className="bg-black rounded-xl p-4 border-4 border-gray-800">
         
-        {/* Token and Free Spin Display */}
-        <div className="flex justify-between text-xs font-mono mb-3 p-2 rounded bg-gray-900 border border-gray-700">
-            <span className="flex items-center gap-1 text-gray-400">
-                <Coins size={12} className="text-yellow-400" />
-                BALANCE: <span className="text-white font-bold">{seTokens.toLocaleString()} SE</span>
-            </span>
-            <span className="flex items-center gap-1">
-                <Gift size={12} className="text-mesh-neon" />
-                FREE SPINS: <span className={`font-bold ${hasFreeSpin ? 'text-mesh-neon' : 'text-gray-500'}`}>{freeSpins}</span>
-            </span>
-        </div>
+        return { 
+            payout: Math.round(payout * multiplier), 
+            win: payout > 0, 
+            freeSpinTriggered 
+        };
+    };
 
-        {/* Slot Reels */}
-        <div className="flex justify-between gap-2 mb-4 bg-[#111] p-3 rounded-lg border-inner shadow-inner">
-          {slots.map((s, i) => {
-            const symbolData = SYMBOLS[s as keyof typeof SYMBOLS] || { color: 'text-gray-500' };
-            const isWinner = !spinning && slots.every(val => val === s); // Check for 3-in-a-row winner
-            return (
-                <div 
-                    key={i} 
-                    className={`flex-1 h-16 flex items-center justify-center text-4xl bg-[#222] rounded border border-gray-700 font-mono 
-                                transition-all duration-300 ${isWinner ? 'bg-mesh-neon/20 shadow-[0_0_20px_rgba(0,255,192,0.8)]' : ''}`}
-                >
-                    <span className={`${symbolData.color} ${spinning ? 'opacity-50' : 'text-glow'}`}>{s}</span>
+    const handleSpin = () => {
+        if (spinning || !canSpin) {
+            if (!canSpin) setError('Not enough SE Tokens! Minimum bet: 500 SE');
+            return;
+        }
+        setError('');
+        setMultiplier(p => hasFreeSpin ? p : 1); // Återställ multiplikatorn om det inte är Freespin
+
+        // Hantera insats/Freespin kostnad
+        if (hasFreeSpin) {
+            setFreeSpins(freeSpins - 1);
+            setMessage(`FREE SPIN! Current Multiplier: x${multiplier}`);
+        } else {
+            setSeTokens(seTokens - BET_COST);
+            setMessage('ROLLING MEGAWAYS...');
+        }
+        
+        setSpinning(true);
+        
+        // Generera det faktiska slutresultatet 
+        const finalResult = Array(MAX_REELS).fill(null).map((_, i) => rollSymbol(i === MAX_REELS - 1));
+        
+        let iterations = 0;
+        const spinInterval = setInterval(() => {
+            setSlots(Array(MAX_REELS).fill(null).map(() => rollSymbol()));
+            iterations++;
+            
+            if (iterations > 30) {
+                clearInterval(spinInterval);
+                
+                // Sätt slutresultatet
+                setSlots(finalResult);
+                const result = calculateResult(finalResult);
+                
+                // Hantera utbetalning/vinst
+                if (result.payout > 0) {
+                    setSeTokens(s => s + result.payout);
+                    setMessage(`BIG WIN! +${result.payout} SE Tokens! (x${multiplier})`);
+                    if (!hasFreeSpin) setMultiplier(m => m + 1); // Öka Multiplikatorn vid vinst (för FreeSpins eller nästa runda)
+                } else if (result.freeSpinTriggered) {
+                    const newFS = 5;
+                    setFreeSpins(f => f + newFS);
+                    setMessage(`FREE SPINS! You won ${newFS} spins! 💥`);
+                    setMultiplier(2); // Starta Freespin med x2 multiplikator
+                } else {
+                    setMessage('NO MATCH - Try again');
+                    if (!hasFreeSpin) setMultiplier(1);
+                }
+
+                setSpinning(false);
+                onSpin(result);
+            }
+        }, 60);
+    };
+
+    return (
+        <div className="relative p-1 rounded-3xl bg-gradient-to-b from-purple-700 to-blue-800 shadow-2xl border-4 border-mesh-neon/50">
+            <div className="bg-black/90 rounded-2xl p-4 border-2 border-gray-900">
+                
+                <h3 className="text-center text-xl font-black text-mesh-neon mb-2 tracking-widest uppercase">
+                    SpawnEngine Megaways
+                </h3>
+                
+                {/* Info / Progressive Jackpot */}
+                <div className="text-center mb-4 p-2 rounded-lg bg-yellow-900/20 border border-yellow-500/30">
+                    <span className="text-xs font-mono text-yellow-300">PROGRESSIVE JACKPOT: 500,000+ SE</span>
                 </div>
-            )
-          })}
+
+                {/* Slot Reels Container */}
+                <div className="flex gap-2">
+                    {/* Multiplier Display (Vänster sida) */}
+                    <div className="w-10 flex flex-col items-center justify-around bg-gray-900 rounded-lg p-1 border-2 border-gray-700">
+                        <span className="text-[10px] text-gray-400 font-mono rotate-180" style={{ writingMode: 'vertical-lr' }}>MULTIPLIER</span>
+                        <div className={`text-3xl font-black font-mono ${multiplier > 1 ? 'text-mesh-neon text-glow animate-pulse-slow' : 'text-gray-500'}`}>
+                            x{multiplier}
+                        </div>
+                        <span className="text-[10px] text-gray-400 font-mono rotate-180" style={{ writingMode: 'vertical-lr' }}>LEVEL</span>
+                    </div>
+
+                    {/* Reels */}
+                    <div className="flex-1 flex justify-between gap-1.5 p-1 bg-[#090909] rounded-lg border-2 border-gray-800 shadow-inner">
+                        {slots.map((s, i) => (
+                            <Reel key={i} symbol={s} spinning={spinning} />
+                        ))}
+                    </div>
+
+                    {/* Slot Handle (Höger sida) */}
+                    <div className="w-8 flex items-center justify-center">
+                        <button onClick={handleSpin} disabled={spinning || !canSpin} className="relative w-full h-1/2 bg-red-600 rounded-full hover:bg-red-500 transition-all active:scale-90 disabled:opacity-50">
+                            <div className="w-4 h-4 bg-red-300 rounded-full absolute top-1 left-1/2 -translate-x-1/2 shadow-inner" />
+                            <div className="w-2 h-full bg-red-800 rounded-b-full mx-auto" />
+                        </button>
+                    </div>
+                </div>
+                
+                {/* Win / Status Message */}
+                <div className="text-center font-mono text-sm my-3 tracking-widest h-5">
+                    {error ? (
+                        <span className="text-red-500 animate-pulse">{error}</span>
+                    ) : (
+                        <span className="text-mesh-neon">{message}</span>
+                    )}
+                </div>
+
+                {/* Footer Controls (Matcha bilden) */}
+                <div className="flex justify-between items-center mt-4 p-2 rounded-lg bg-gray-900/50 border border-gray-700">
+                    {/* Bet Display */}
+                    <div className="flex flex-col text-xs font-mono text-gray-400">
+                        BET: <span className="text-white font-bold">{BET_COST} SE</span>
+                    </div>
+
+                    {/* Spin Button */}
+                    <button 
+                        onClick={handleSpin}
+                        disabled={spinning || !canSpin}
+                        className={`w-36 py-2 rounded-full font-bold text-sm shadow-[0_0_15px_rgba(0,255,192,0.6)] active:scale-95 transition-transform disabled:opacity-50 
+                            ${hasFreeSpin ? 'bg-cyan-500 text-black' : 'bg-mesh-neon text-black'}`}
+                    >
+                        {spinning ? <RotateCw size={18} className="animate-spin inline mr-1" /> : hasFreeSpin ? 'FREE SPIN' : 'SPIN'}
+                    </button>
+                    
+                    {/* Free Spins / Autoplay */}
+                    <div className="flex flex-col text-xs font-mono text-right text-gray-400">
+                        FS: <span className={`font-bold ${hasFreeSpin ? 'text-mesh-neon' : 'text-gray-500'}`}>{freeSpins}</span>
+                        <span className="text-[10px] text-purple-400 mt-0.5 cursor-pointer hover:underline">AUTOPLAY</span>
+                    </div>
+                </div>
+            </div>
         </div>
-        
-        {/* Message / Error */}
-        <div className="text-center font-mono text-sm mb-3 tracking-widest h-5">
-            {error ? (
-                <span className="text-red-500 animate-pulse">{error}</span>
-            ) : (
-                <span className="text-mesh-neon">{message}</span>
-            )}
-        </div>
-        
-        {/* Spin Button */}
-        <button 
-          onClick={handleSpin}
-          disabled={spinning || !canSpin}
-          className="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-bold text-lg shadow-[0_0_15px_rgba(234,179,8,0.5)] active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"
-        >
-          {spinning ? (
-            <>
-              <RotateCw size={18} className="animate-spin" /> SPINNING...
-            </>
-          ) : hasFreeSpin ? (
-            <>
-              <Gift size={18} /> USE FREE SPIN
-            </>
-          ) : (
-            <>
-              <DollarSign size={18} /> PULL HANDLE ({BET_COST} SE)
-            </>
-          )}
-        </button>
-      </div>
-    </div>
-  );
+    );
 };
 
 
@@ -358,12 +407,11 @@ const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }: {
 // --- APP ---
 
 const App: React.FC = () => {
-  const [activeTab, setActiveTab] = useState<MainTab>('home');
+  const [activeTab, setActiveTab] = useState<MainTab>('loot'); // Startar direkt på Loot-fliken
   const [showSettings, setShowSettings] = useState(false);
-  const [xp, setXp] = useState(1575);
-  const [streak, setStreak] = useState(4);
+  const [xp, setXp] = useState(5208); // Uppdaterad XP för att matcha bilden
   const [seTokens, setSeTokens] = useState(5000); // MOCK TOKEN BALANCE
-  const [freeSpins, setFreeSpins] = useState(1); // MOCK FREE SPINS
+  const [freeSpins, setFreeSpins] = useState(5); // MOCK FREE SPINS (Matcha bilden)
   const [activeLootSubTab, setActiveLootSubTab] = useState<LootSubTab>('slot');
   const [activeBrainSubTab, setActiveBrainSubTab] = useState<BrainSubTab>('quests');
   const [latestSupCast, setLatestSupCast] = useState(MOCK_SUPCASTS[0].context);
@@ -371,13 +419,12 @@ const App: React.FC = () => {
   // -- HANDLERS --
   const addXP = (amount: number) => setXp(p => p + amount);
   const handleSlotSpin = (result: SlotResult) => {
-    addXP(50);
-    if (result.win) addXP(result.payout / 50); // Extra XP for big win
+    addXP(100); // Mer XP för Megaways Spin
+    if (result.win) addXP(result.payout / 100); // Extra XP for big win
   };
   
   // --- SUB TAB VIEWS ---
   
-  // 1. Loot Sub Views
   const PacksView = () => (
     <div className="grid grid-cols-2 gap-3">
         {[{title: "Starter Pack", desc: "Contains 3 common shards.", price: "OPEN (Free)", icon: "🔥", color: "mesh-neon"},
@@ -397,16 +444,9 @@ const App: React.FC = () => {
   );
 
   const SlotView = () => (
-    <div className="space-y-6">
-      <div className="text-center space-y-1">
-        <h2 className="text-2xl font-black text-white italic tracking-tighter flex items-center justify-center gap-2">
-            <GitBranch size={20} className="text-mesh-neon" /> SPAWN SLOT V2.0
-        </h2>
-        <p className="text-xs text-gray-400">Bet 100 SE Tokens per spin. Jackpot = 3x 💎 (5,000 SE).</p>
-      </div>
-
-      {/* FULLT FUNGERANDE CASINO SLOT */}
-      <SlotMachine 
+    <div className="space-y-4">
+      {/* SpawnEngine Megaways Slot */}
+      <SpawnSlotMegaways 
           seTokens={seTokens} 
           setSeTokens={setSeTokens}
           freeSpins={freeSpins}
@@ -418,9 +458,9 @@ const App: React.FC = () => {
 
   const HistoryView = () => (
     <div className="space-y-3">
-        <h3 className="text-sm font-bold text-gray-300">Recent Loot Drops</h3>
-        {[{date: "2025-12-10", type: "Slot", result: "JACKPOT! 🏆", xp: "+150 XP"}, 
-          {date: "2025-12-09", type: "Pack", result: "2 Commons, 1 Rare", xp: "+80 XP"}]
+        <h3 className="text-sm font-bold text-gray-300">Recent Activity</h3>
+        {[{date: "2025-12-10", type: "Slot Win", result: "+1500 SE Tokens", xp: "+150 XP"}, 
+          {date: "2025-12-09", type: "Mint", result: "Zora Drop #443", xp: "+80 XP"}]
           .map((item, i) => (
             <div key={i} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
                 <div className="text-xs text-white">
@@ -434,7 +474,7 @@ const App: React.FC = () => {
   );
 
 
-  // 2. Brain Sub Views
+  // 2. Brain Sub Views (Minskade för fokus)
   const QuestsView = () => (
     <div className="space-y-3">
         <h3 className="text-sm font-bold text-gray-300 mb-2">Active Quests</h3>
@@ -452,7 +492,7 @@ const App: React.FC = () => {
                         <Star className="w-5 h-5 text-yellow-400 fill-yellow-400" />
                     ) : (
                         <button className="px-3 py-1 text-xs rounded-full bg-mesh-cyan/20 text-mesh-cyan hover:bg-mesh-cyan hover:text-black">
-                            Mark as Shipped
+                            Start Quest
                         </button>
                     )}
                 </div>
@@ -460,233 +500,113 @@ const App: React.FC = () => {
         ))}
     </div>
   );
+  
+  const AIMeshHelperView = () => (
+    <div className="space-y-4">
+        <h3 className="text-sm font-bold text-gray-300">AI Mesh Helper (Coming Soon)</h3>
+        <SpawnBotTerminal />
+        <p className="text-xs text-gray-500">The SpawnBot Terminal is your interface to the AI Mesh. Use commands to scan, mint, or automate actions.</p>
+    </div>
+  );
 
-  const AIMeshHelperView = () => {
-    const [prompt, setPrompt] = useState(latestSupCast);
-    const [concept, setConcept] = useState('');
-    const [generating, setGenerating] = useState(false);
-
-    const generateConcept = () => {
-      setGenerating(true);
-      setConcept('');
-      setTimeout(() => {
-        setConcept(`// MidJourney Prompt (v6.1):\nUX concept for gamifying the mainnet -> base bridge, holographic interface, deep blue background, neon cyan accents, cinematic lighting, 8k --style spawnengine`);
-        setGenerating(false);
-        addXP(75);
-      }, 1500);
-    };
-
-    return (
-        <div className="space-y-4">
-            <h3 className="text-sm font-bold text-gray-300">AI Mesh Helper (Prompt Generator)</h3>
-            <HoloCard>
-                <label className="text-xs text-gray-400 mb-1 block">Latest Challenge / Problem (from SupCast):</label>
-                <textarea
-                    value={prompt}
-                    onChange={(e) => setPrompt(e.target.value)}
-                    className="w-full h-16 p-2 bg-black/50 border border-gray-700 rounded text-xs text-white"
-                />
-            </HoloCard>
-
-            <button 
-                onClick={generateConcept}
-                disabled={generating}
-                className="w-full py-2 rounded-lg bg-mesh-purple text-white font-bold text-sm hover:bg-mesh-purple/80 transition-colors disabled:opacity-50 flex items-center justify-center gap-2"
-            >
-                {generating ? <RefreshCw size={14} className="animate-spin" /> : <Cpu size={14} />}
-                {generating ? 'GENERATING CONCEPT...' : 'GENERATE MESH CONCEPT (+75 XP)'}
-            </button>
-
-            {concept && (
-                <HoloCard className="bg-mesh-neon/5 border-mesh-neon/30 p-3">
-                    <pre className="text-[10px] text-mesh-neon whitespace-pre-wrap">{concept}</pre>
-                    <button className="mt-3 w-full py-1 text-xs rounded bg-mesh-neon text-black font-bold">
-                        Copy Prompt
-                    </button>
+  const SupCastView = () => (
+    <div className="space-y-4">
+        <h3 className="text-sm font-bold text-gray-300">Create SupCast (Coming Soon)</h3>
+        <p className="text-xs text-gray-500">SupCast will allow direct feedback and idea submission to the core team.</p>
+        <div className="space-y-2">
+            {MOCK_SUPCASTS.map(sc => (
+                <HoloCard key={sc.id} className="p-3 opacity-50">
+                    <div className="text-sm font-bold text-white">{sc.title}</div>
+                    <p className="text-xs text-gray-400 mt-1 line-clamp-1">{sc.context}</p>
                 </HoloCard>
-            )}
+            ))}
         </div>
-    );
-  };
-
-  const SupCastView = () => {
-    const [title, setTitle] = useState('');
-    const [context, setContext] = useState('');
-    const [category, setCategory] = useState('SpawnEngine');
-
-    const handleSend = (e: React.FormEvent) => {
-        e.preventDefault();
-        // In V1, this just updates the mock and latest input
-        if (title && context) {
-            setLatestSupCast(context); // Set as latest AI input
-            setContext('');
-            setTitle('');
-            alert('SupCast stored locally (Mock)');
-        }
-    }
-
-    return (
-        <div className="space-y-6">
-            <h3 className="text-sm font-bold text-gray-300">Create SupCast (Feedback)</h3>
-            <HoloCard>
-                <form onSubmit={handleSend} className="space-y-3">
-                    <input
-                        value={title}
-                        onChange={(e) => setTitle(e.target.value)}
-                        placeholder="What do you want to tell Base / Farcaster / Vibe?"
-                        className="w-full p-2 bg-black/50 border border-gray-700 rounded text-sm text-white placeholder-gray-500"
-                    />
-                    <textarea
-                        value={context}
-                        onChange={(e) => setContext(e.target.value)}
-                        placeholder="Describe the bug/idea/experience."
-                        className="w-full h-20 p-2 bg-black/50 border border-gray-700 rounded text-xs text-white placeholder-gray-500"
-                    />
-                    <select
-                        value={category}
-                        onChange={(e) => setCategory(e.target.value)}
-                        className="w-full p-2 bg-black/50 border border-gray-700 rounded text-xs text-white"
-                    >
-                        {['SpawnEngine', 'Base App', 'Vibe', 'Zora'].map(cat => (
-                            <option key={cat} value={cat}>{cat}</option>
-                        ))}
-                    </select>
-                    <button type="submit" className="w-full py-2 rounded-lg bg-mesh-cyan text-black font-bold text-sm hover:opacity-90">
-                        <Send size={14} className="inline mr-2" /> Send SupCast
-                    </button>
-                </form>
-            </HoloCard>
-
-            <h3 className="text-sm font-bold text-gray-300 mt-6">Latest SupCasts</h3>
-            <div className="space-y-2">
-                {MOCK_SUPCASTS.map(sc => (
-                    <HoloCard key={sc.id} className="p-3">
-                        <div className="flex justify-between items-start">
-                            <div className="text-sm font-bold text-white">{sc.title}</div>
-                            <span className="text-[10px] bg-gray-700/50 px-2 py-0.5 rounded-full">{sc.category}</span>
-                        </div>
-                        <p className="text-xs text-gray-400 mt-1 line-clamp-2">{sc.context}</p>
-                        <button 
-                            onClick={() => setActiveBrainSubTab('ai')}
-                            className="mt-2 text-[10px] font-bold text-mesh-neon hover:underline"
-                        >
-                            Use as Mesh Input ({sc.useCount})
-                        </button>
-                    </HoloCard>
-                ))}
-            </div>
-        </div>
-    );
-  };
+    </div>
+  );
 
   // --- MAIN TAB VIEWS ---
+  
+  const PlatformHeader = ({ title, icon: Icon, actions = null }: { title: string, icon: React.ElementType, actions?: React.ReactNode }) => (
+      <div className="flex justify-between items-center p-4 rounded-xl bg-black/50 border border-white/10 mb-4">
+          <h1 className="text-lg font-bold text-white flex items-center gap-2">
+              <Icon size={20} className="text-mesh-neon" /> {title}
+          </h1>
+          {actions}
+      </div>
+  );
+
 
   const HomeView = () => (
     <div className="space-y-6 animate-fade-in">
-      {/* HUD HEADER (WOW Goal #5) */}
-      <HoloCard className="bg-gradient-to-r from-mesh-dark to-[#0a1025]">
-        <div className="flex justify-between items-start">
-            <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-full bg-gradient-to-tr from-mesh-neon to-mesh-purple p-[2px]">
-                    <div className="w-full h-full rounded-full bg-black flex items-center justify-center overflow-hidden">
-                        <span className="text-xl">👾</span>
-                    </div>
-                </div>
-                <div>
-                    <h2 className="text-lg font-bold text-white leading-none">@spawniz</h2>
-                    <div className="flex items-center gap-2 mt-1">
-                        <span className="text-[10px] px-2 py-0.5 rounded bg-mesh-neon/20 text-mesh-neon border border-mesh-neon/30">Mesh Architect</span>
-                        <span className="text-[10px] text-gray-400">SpawnEngine · Mesh HUD</span>
-                    </div>
-                </div>
-            </div>
-            <button onClick={() => setShowSettings(true)} className="p-1 rounded-full text-gray-400 hover:text-white transition-colors">
-                <Settings className="w-5 h-5" />
-            </button>
-        </div>
+        <PlatformHeader 
+            title="Overview" 
+            icon={Home} 
+            actions={<button onClick={() => setShowSettings(true)} className="text-gray-400 hover:text-white"><Settings size={20} /></button>}
+        />
         
-        {/* Stats Grid */}
-        <div className="grid grid-cols-3 gap-3 mt-4 pt-4 border-t border-white/10">
-            <div className="text-center">
-                <div className="text-lg font-bold text-white">{xp.toLocaleString()}</div>
-                <div className="text-[10px] text-gray-400 uppercase">Total XP</div>
-            </div>
-            <div className="text-center">
-                <div className="text-lg font-bold text-white">{seTokens.toLocaleString()}</div>
-                <div className="text-[10px] text-gray-400 uppercase">SE Tokens</div>
-            </div>
-            <div className="text-center">
-                <div className="text-lg font-bold text-white">{freeSpins}</div>
-                <div className="text-[10px] text-gray-400 uppercase">Free Spins</div>
-            </div>
+        {/* Huvudstatistik (Matcha bilden) */}
+        <div className="grid grid-cols-2 gap-4">
+            <HoloCard className="border-mesh-neon/30">
+                <div className="text-sm text-gray-400">SpawnEngine Tokens (SE)</div>
+                <div className="text-2xl font-black text-white">{seTokens.toLocaleString()}</div>
+                <div className="text-xs text-mesh-neon font-mono mt-1">+1.08% / 30d</div>
+            </HoloCard>
+            <HoloCard className="border-purple-500/30">
+                <div className="text-sm text-gray-400">Total XP</div>
+                <div className="text-2xl font-black text-white">{xp.toLocaleString()}</div>
+                <div className="text-xs text-purple-400 font-mono mt-1">Lvl 12</div>
+            </HoloCard>
         </div>
-      </HoloCard>
 
-      {/* STREAK & ACTIONS (WOW Goal #1) */}
-      <div className="grid grid-cols-2 gap-3">
-        <HoloCard onClick={() => setStreak(s => s + 1)} className="cursor-pointer active:scale-95 bg-orange-900/20 border-orange-500/30">
-          <div className="flex flex-col items-center justify-center text-center h-full">
-            <Flame className={`w-8 h-8 ${streak > 0 ? 'text-orange-500 fill-orange-500 animate-pulse-slow' : 'text-gray-600'}`} />
-            <div className="text-2xl font-bold text-white mt-1">{streak}</div>
-            <div className="text-[10px] text-gray-400 uppercase">Day Streak</div>
-            <button onClick={() => addXP(100)} className="text-[10px] px-2 mt-1 rounded-full bg-mesh-neon/20 text-mesh-neon hover:bg-mesh-neon hover:text-black">
-                Check-in Today (+100 XP)
-            </button>
-          </div>
-        </HoloCard>
-        
-        <HoloCard className="bg-mesh-neon/5 border-mesh-neon/30 flex flex-col justify-between">
-          <div className="text-xs text-mesh-neon font-bold uppercase mb-2 flex items-center gap-1">
-            <Zap size={12} /> Quick Mint (WOW Goal #3)
-          </div>
-          <button className="w-full py-2 bg-mesh-neon text-black font-bold text-xs rounded hover:bg-white transition-colors">
-            BUY $WARP COIN (1-Click)
-          </button>
-          <button className="w-full py-2 mt-2 bg-blue-600/50 text-white font-bold text-xs rounded hover:bg-blue-600/70 transition-colors">
-            Bridge ETH to Base
-          </button>
-        </HoloCard>
-      </div>
-
-      {/* ACTIVITY FEED (WOW Goal #1) */}
-      <div>
-        <div className="flex justify-between items-center mb-3 px-1">
-          <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
-            <Activity className="w-4 h-4 text-mesh-cyan" /> 
-            LIVE MESH FEED
-          </h3>
-          <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 animate-pulse">● Live</span>
-        </div>
-        <div className="space-y-2">
-          {MOCK_ACTIVITY.map((item) => (
-            <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5 hover:bg-white/10 transition-colors">
-              <div className="flex items-center gap-3">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm
-                  ${item.type === 'mint' ? 'bg-purple-500/20 text-purple-400' : 
-                    item.type === 'bot' ? 'bg-mesh-cyan/20 text-mesh-cyan' : 
-                    'bg-orange-500/20 text-orange-400'}`}>
-                  {item.type === 'mint' ? <Sparkles size={14}/> : item.type === 'bot' ? <Cpu size={14}/> : <Box size={14}/>}
-                </div>
-                <div>
-                  <div className="text-xs text-white font-medium">{item.text}</div>
-                  <div className="text-[10px] text-gray-500">{item.time}</div>
-                </div>
-              </div>
-              <div className="text-xs font-mono text-gray-300">{item.value}</div>
+        {/* Live Feed */}
+        <div>
+            <div className="flex justify-between items-center mb-3 px-1">
+                <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+                    <Activity className="w-4 h-4 text-mesh-cyan" /> 
+                    LIVE MESH FEED
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 rounded-full bg-green-500/20 text-green-400 animate-pulse">● Live</span>
             </div>
-          ))}
+            <div className="space-y-2">
+                {MOCK_ACTIVITY.map((item) => (
+                    <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-white/5 border border-white/5">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-sm ${item.type === 'mint' ? 'bg-purple-500/20 text-purple-400' : item.type === 'bot' ? 'bg-mesh-cyan/20 text-mesh-cyan' : 'bg-orange-500/20 text-orange-400'}`}>
+                                {item.type === 'mint' ? <Sparkles size={14}/> : item.type === 'bot' ? <Cpu size={14}/> : <Box size={14}/>}
+                            </div>
+                            <div>
+                                <div className="text-xs text-white font-medium">{item.text}</div>
+                                <div className="text-[10px] text-gray-500">{item.time}</div>
+                            </div>
+                        </div>
+                        <div className="text-xs font-mono text-gray-300">{item.value}</div>
+                    </div>
+                ))}
+            </div>
         </div>
-      </div>
     </div>
   );
 
   const LootView = () => (
     <div className="animate-fade-in">
+        <PlatformHeader 
+            title="Loot" 
+            icon={Sword} 
+            actions={
+                <div className="flex gap-2">
+                    <button className="text-xs text-purple-400 font-bold hover:text-purple-300">Post Loot</button>
+                    <button className="text-xs text-gray-400 hover:text-white">History</button>
+                </div>
+            }
+        />
+
+        {/* Loot Sub Nav */}
         <SubNav 
             subTabs={[{id: 'packs', label: 'Packs'}, {id: 'slot', label: 'Spawn Slot'}, {id: 'history', label: 'History'}]}
             activeSubTab={activeLootSubTab}
             setActiveSubTab={setActiveLootSubTab}
         />
+        
         {activeLootSubTab === 'packs' && <PacksView />}
         {activeLootSubTab === 'slot' && <SlotView />}
         {activeLootSubTab === 'history' && <HistoryView />}
@@ -695,43 +615,37 @@ const App: React.FC = () => {
   
   const MarketView = () => (
     <div className="space-y-5 animate-fade-in">
-      <SubNav 
+        <PlatformHeader title="Market" icon={Box} />
+        <SubNav 
             subTabs={[{id: 'trending', label: 'Trending'}, {id: 'creators', label: 'Creators'}, {id: 'zora', label: 'Zora Coins'}]}
-            activeSubTab={'trending'} // Simplified mock
+            activeSubTab={'trending'}
             setActiveSubTab={() => {}}
         />
 
-      <HoloCard className="relative h-28 rounded-2xl overflow-hidden bg-gray-900 border border-white/10 group cursor-pointer">
-        <div className="absolute inset-0 bg-gradient-to-t from-black via-transparent to-transparent z-10" />
-        <div className="absolute bottom-0 left-0 p-4 z-20 w-full">
-            <h3 className="text-xl font-bold text-white">Onchain Market · Base</h3>
-            <p className="text-xs text-gray-300">Follow packs, tokens, and creators.</p>
+        <h3 className="text-sm font-bold text-white flex items-center gap-2">
+            <TrendingUp size={16} className="text-red-500" /> HOT TRENDING
+        </h3>
+        <div className="space-y-3">
+            {[{name: "VibeMarket Booster", price: "0.025 ETH", participants: "1.2K"},
+              {name: "Creator Token · $SPAWNIZ", price: "0.001 ETH", participants: "500"}]
+              .map((item, i) => (
+                <HoloCard key={i} className="p-3 flex justify-between items-center hover:border-red-500/50">
+                  <div>
+                    <div className="text-sm font-bold text-white">{item.name}</div>
+                    <div className="text-[10px] text-gray-400">P: {item.participants} | {item.price}</div>
+                  </div>
+                  <button className="px-3 py-1 text-xs rounded-full bg-mesh-neon text-black font-bold">
+                    VIEW
+                  </button>
+                </HoloCard>
+              ))}
         </div>
-      </HoloCard>
-
-      <h3 className="text-sm font-bold text-white flex items-center gap-2">
-        <TrendingUp size={16} className="text-red-500" /> HOT TRENDING (WOW Goal #4)
-      </h3>
-      <div className="space-y-3">
-        {[{name: "VibeMarket Booster", price: "0.025 ETH", participants: "1.2K"},
-          {name: "Creator Token · $SPAWNIZ", price: "0.001 ETH", participants: "500"}]
-          .map((item, i) => (
-            <HoloCard key={i} className="p-3 flex justify-between items-center hover:border-red-500/50">
-              <div>
-                <div className="text-sm font-bold text-white">{item.name}</div>
-                <div className="text-[10px] text-gray-400">P: {item.participants} | {item.price}</div>
-              </div>
-              <button className="px-3 py-1 text-xs rounded-full bg-mesh-neon text-black font-bold">
-                VIEW
-              </button>
-            </HoloCard>
-          ))}
-      </div>
     </div>
   );
   
   const BrainView = () => (
     <div className="space-y-5 animate-fade-in">
+        <PlatformHeader title="Brain" icon={Terminal} />
         <SubNav 
             subTabs={[{id: 'quests', label: 'Quests'}, {id: 'ai', label: 'AI Helper'}, {id: 'supcast', label: 'SupCast'}]}
             activeSubTab={activeBrainSubTab}
@@ -746,34 +660,20 @@ const App: React.FC = () => {
   
   const ProfileView = () => (
     <div className="space-y-6 animate-fade-in">
+        <PlatformHeader title="Profile" icon={User} />
         <HoloCard className="flex flex-col items-center text-center p-6">
             <div className="w-16 h-16 rounded-full bg-gradient-to-tr from-mesh-neon to-mesh-purple mb-3 p-[3px]">
                 <div className="w-full h-full rounded-full bg-black flex items-center justify-center text-3xl">👾</div>
             </div>
             <h2 className="text-xl font-bold text-white">@spawniz</h2>
             <p className="text-xs text-gray-400">Mesh Architect | XP Lvl 12 | Base Builder</p>
-            <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10 w-full">
-                <div className="text-center">
-                    <div className="text-lg font-bold text-white">{xp.toLocaleString()}</div>
-                    <div className="text-[10px] text-gray-400 uppercase">XP</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-lg font-bold text-white">3/3</div>
-                    <div className="text-[10px] text-gray-400 uppercase">Quests Completed</div>
-                </div>
-                <div className="text-center">
-                    <div className="text-lg font-bold text-white">42</div>
-                    <div className="text-[10px] text-gray-400 uppercase">Collectibles</div>
-                </div>
-            </div>
         </HoloCard>
-
+        
         <div className="space-y-3">
             <h3 className="text-sm font-bold text-gray-300">Account Overview</h3>
             {[
                 { title: 'Preferred Wallet', value: generateAddress().slice(0, 10) + '...', icon: Wallet },
                 { title: 'Linked Farcaster Handle', value: '@spawniz (Active)', icon: Users },
-                { title: 'Roles & Permissions', value: 'Mesh Architect', icon: Layers },
             ].map((item, i) => (
                 <HoloCard key={i} className="p-3 flex justify-between items-center cursor-pointer hover:border-mesh-cyan/50">
                     <div className="flex items-center gap-3">
@@ -819,31 +719,9 @@ const App: React.FC = () => {
                 Disconnect
               </button>
             </div>
-
-            <h3 className="text-xs font-bold text-gray-400 uppercase mt-4">Other Settings (WOW Goal #7)</h3>
-            <div className="space-y-2">
-                {[
-                    { title: 'Devices & Storage', icon: Cpu, desc: 'Manage cache and connected devices.' },
-                    { title: 'Theme: Dark / Neon', icon: Sparkles, desc: 'Change visual styling.' },
-                    { title: 'Trade Ideas', icon: TrendingUp, desc: 'Go to SupCast creation.' },
-                    { title: 'Support / Docs', icon: HelpCircle, desc: 'Open knowledge base.' },
-                    { title: 'Log Out', icon: ExternalLink, desc: 'Clear session.' },
-                ].map((item, i) => (
-                    <div key={i} className="flex justify-between items-center p-3 rounded-xl bg-white/5 border border-white/5 hover:border-mesh-cyan/50 cursor-pointer">
-                        <div className="flex items-center gap-3">
-                            <item.icon className="w-5 h-5 text-gray-400" />
-                            <div>
-                                <div className="text-sm font-bold text-white">{item.title}</div>
-                                <div className="text-[10px] text-gray-500">{item.desc}</div>
-                            </div>
-                        </div>
-                        <ChevronRight className="w-4 h-4 text-gray-500" />
-                    </div>
-                ))}
-            </div>
-
+            
             <button className="w-full py-3 rounded-xl bg-mesh-neon text-black font-bold text-sm hover:opacity-90 mt-4">
-                Upgrade to Premium ($9/mo) (WOW Goal #9)
+                Upgrade to Premium ($9/mo)
             </button>
           </div>
         </div>
@@ -857,35 +735,11 @@ const App: React.FC = () => {
     <div className="min-h-screen relative font-sans selection:bg-mesh-neon/30 text-gray-100">
       <NeuralBackground />
       
-      {/* MOBILE APP CONTAINER */}
-      <div className="max-w-md mx-auto min-h-screen bg-transparent relative flex flex-col pb-24">
+      {/* PLATTFORMSCONTAINER SOM MATCHAR BILDEN */}
+      <div className="min-h-screen relative flex">
         
-        {/* HEADER BAR */}
-        <header className="sticky top-0 z-30 px-4 py-3 backdrop-blur-md bg-black/20 border-b border-white/5 flex justify-between items-center">
-          <div className="flex items-center gap-2">
-            <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-mesh-neon to-blue-600 flex items-center justify-center font-black text-black italic">
-              SE
-            </div>
-            <span className="font-bold text-sm tracking-wide">SPAWN<span className="text-mesh-neon">ENGINE</span></span>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            <GasMeter />
-          </div>
-        </header>
-
-        {/* MAIN CONTENT AREA */}
-        <main className="flex-1 p-4 overflow-y-auto">
-          {activeTab === 'home' && <HomeView />}
-          {activeTab === 'loot' && <LootView />}
-          {activeTab === 'market' && <MarketView />}
-          {activeTab === 'brain' && <BrainView />}
-          {activeTab === 'profile' && <ProfileView />}
-        </main>
-
-        {/* BOTTOM NAV (WOW Goal #7, Glassmorphism) */}
-        <nav className="fixed bottom-0 left-0 w-full z-40 px-4 pb-4 pt-2">
-          <div className="max-w-md mx-auto bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl h-16 px-2 flex justify-between items-center shadow-2xl">
+        {/* VÄNSTER NAV (Sidebar) */}
+        <nav className="hidden sm:flex flex-col w-20 bg-black/50 backdrop-blur-lg border-r border-white/10 p-2 pt-16 sticky top-0 h-screen z-40">
             {[
               { id: 'home', icon: Home, label: 'Home' },
               { id: 'loot', icon: Sword, label: 'Loot' },
@@ -898,19 +752,89 @@ const App: React.FC = () => {
                 <button
                   key={tab.id}
                   onClick={() => setActiveTab(tab.id as MainTab)}
-                  className={`relative flex flex-col items-center justify-center w-full h-full transition-all duration-300 ${isActive ? 'text-mesh-neon -translate-y-1' : 'text-gray-500 hover:text-gray-300'}`}
+                  className={`flex flex-col items-center justify-center p-3 my-1 rounded-xl transition-all duration-300 
+                              ${isActive ? 'bg-mesh-neon/20 text-mesh-neon shadow-[0_0_10px_rgba(0,255,192,0.3)]' : 'text-gray-500 hover:text-gray-300 hover:bg-white/5'}`}
                 >
-                  {isActive && (
-                    <div className="absolute -top-2 w-8 h-8 bg-mesh-neon/20 rounded-full blur-md" />
-                  )}
-                  <tab.icon className={`w-5 h-5 ${isActive ? 'fill-current' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
+                  <tab.icon className={`w-6 h-6 ${isActive ? 'fill-current' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
                   <span className="text-[9px] font-bold mt-1 uppercase tracking-wider">{tab.label}</span>
                 </button>
               )
             })}
-          </div>
         </nav>
 
+        {/* HÖGER CONTAINER (Huvudområdet) */}
+        <div className="flex-1 flex flex-col relative overflow-y-auto">
+            
+            {/* TOP HEADER BAR */}
+            <header className="sticky top-0 z-30 px-4 py-3 backdrop-blur-md bg-black/30 border-b border-white/5 flex justify-between items-center">
+                <div className="flex items-center gap-4">
+                    <div className="sm:hidden w-8 h-8 rounded-lg bg-gradient-to-br from-mesh-neon to-blue-600 flex items-center justify-center font-black text-black italic">
+                        SE
+                    </div>
+                    <span className="font-bold text-lg tracking-wider hidden sm:block">SPAWN<span className="text-mesh-neon">ENGINE</span></span>
+                    
+                    {/* Huvudstatistik i toppen (Matcha bilden) */}
+                    <div className="hidden sm:flex items-center gap-4 text-xs font-mono">
+                        <div className="flex items-center gap-1 text-gray-400">
+                            <Coins size={12} className="text-yellow-400" />
+                            Tokens: <span className="text-white font-bold">{seTokens.toLocaleString()} SE</span>
+                        </div>
+                        <div className="flex items-center gap-1 text-gray-400">
+                            <Trophy size={12} className="text-purple-400" />
+                            XP: <span className="text-white font-bold">{xp.toLocaleString()}</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div className="flex items-center gap-3">
+                    <GasMeter />
+                    <button onClick={() => setShowSettings(true)} className="p-2 rounded-full text-gray-400 hover:text-white transition-colors border border-gray-700">
+                        <Settings className="w-5 h-5" />
+                    </button>
+                </div>
+            </header>
+
+            {/* MAIN CONTENT AREA */}
+            <main className="flex-1 p-4 sm:p-6 overflow-y-auto">
+                <div className="max-w-xl mx-auto sm:max-w-full">
+                    {activeTab === 'home' && <HomeView />}
+                    {activeTab === 'loot' && <LootView />}
+                    {activeTab === 'market' && <MarketView />}
+                    {activeTab === 'brain' && <BrainView />}
+                    {activeTab === 'profile' && <ProfileView />}
+                </div>
+            </main>
+
+            {/* BOTTOM NAV (Endast Mobil - Döljs på Desktop/Plattformsvy) */}
+            <nav className="sm:hidden fixed bottom-0 left-0 w-full z-40 px-4 pb-4 pt-2">
+                <div className="max-w-md mx-auto bg-[#0a0a0a]/90 backdrop-blur-xl border border-white/10 rounded-2xl h-16 px-2 flex justify-between items-center shadow-2xl">
+                    {[
+                      { id: 'home', icon: Home, label: 'Home' },
+                      { id: 'loot', icon: Sword, label: 'Loot' },
+                      { id: 'market', icon: Box, label: 'Market' },
+                      { id: 'brain', icon: Terminal, label: 'Brain' },
+                      { id: 'profile', icon: User, label: 'Profile' },
+                    ].map((tab) => {
+                      const isActive = activeTab === tab.id;
+                      return (
+                        <button
+                          key={tab.id}
+                          onClick={() => setActiveTab(tab.id as MainTab)}
+                          className={`relative flex flex-col items-center justify-center w-full h-full transition-all duration-300 ${isActive ? 'text-mesh-neon -translate-y-1' : 'text-gray-500 hover:text-gray-300'}`}
+                        >
+                          {isActive && (
+                            <div className="absolute -top-2 w-8 h-8 bg-mesh-neon/20 rounded-full blur-md" />
+                          )}
+                          <tab.icon className={`w-5 h-5 ${isActive ? 'fill-current' : ''}`} strokeWidth={isActive ? 2.5 : 2} />
+                          <span className="text-[9px] font-bold mt-1 uppercase tracking-wider">{tab.label}</span>
+                        </button>
+                      )
+                    })}
+                </div>
+            </nav>
+
+        </div>
+        
         {/* OVERLAYS */}
         <SettingsModal />
         
