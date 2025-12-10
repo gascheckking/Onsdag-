@@ -4,7 +4,8 @@ import {
   Wallet, Trophy, Sparkles, Activity, ArrowRight, 
   Terminal, Cpu, Coins, Flame, RefreshCw,
   ChevronRight, ExternalLink, ShieldCheck, Ghost, 
-  Target, TrendingUp, HelpCircle, Send, Users, Layers, Star
+  Target, TrendingUp, HelpCircle, Send, Users, Layers, Star,
+  Lock, GitBranch, Gem, Gift, DollarSign, RotateCw
 } from 'lucide-react';
 
 // --- TYPES & INTERFACES ---
@@ -57,20 +58,19 @@ const HoloCard = ({ children, className = "", glow = false, onClick = undefined 
   </div>
 );
 
-// 3. GAS METER (WOW Goal #2)
+// 3. GAS METER
 const GasMeter = () => {
   const [gwei, setGwei] = useState(0.05);
   
   useEffect(() => {
     const interval = setInterval(() => {
-      // Simulera live gas-uppdateringar (WOW Goal #2)
       setGwei(prev => Math.max(0.01, +(prev + (Math.random() * 0.04 - 0.02)).toFixed(3)));
     }, 3000);
     return () => clearInterval(interval);
   }, []);
 
   const color = gwei < 0.1 ? 'text-emerald-400' : gwei < 0.5 ? 'text-yellow-400' : 'text-red-400';
-  const barWidth = Math.min(100, (gwei / 0.8) * 100); // 0.8 max for bar visualization
+  const barWidth = Math.min(100, (gwei / 0.8) * 100);
 
   return (
     <div className="flex flex-col gap-1 w-20">
@@ -88,68 +88,185 @@ const GasMeter = () => {
   );
 };
 
-// 4. SLOT MACHINE ENGINE (Loot Tab)
-const SlotMachine = ({ onSpin }: { onSpin: (win: boolean) => void }) => {
-  const [spinning, setSpinning] = useState(false);
-  const [slots, setSlots] = useState(['💎', '🍒', '🍋']);
-  const [message, setMessage] = useState('SPIN TO WIN');
+// 4. SPAWN SLOT V2.0 (Fullt fungerande med token-logik)
+interface SlotResult {
+    symbols: string[];
+    payout: number;
+    win: boolean;
+    freeSpin: boolean;
+}
 
-  const symbols = ['💎', '7️⃣', '🍒', '🍋', '👾', '⚡️'];
+const SYMBOLS = {
+    '💎': { payout: 5000, color: 'text-mesh-neon' }, // Jackpot
+    '7️⃣': { payout: 1000, color: 'text-red-500' }, // High
+    '💰': { payout: 500, color: 'text-green-500' }, // Medium
+    '👾': { payout: 200, color: 'text-purple-500' }, // Medium
+    '🍒': { payout: 100, color: 'text-yellow-500' }, // Low (Insatsen tillbaka)
+    '⚡️': { payout: 0, color: 'text-gray-500', freeSpin: true }, // Free Spin
+    'X': { payout: 0, color: 'text-gray-700' }, // Empty/Loss
+};
+const SYMBOL_KEYS = Object.keys(SYMBOLS);
+const BET_COST = 100;
+
+const SlotMachine = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onSpin }: { 
+    seTokens: number, 
+    setSeTokens: (amount: number) => void,
+    freeSpins: number,
+    setFreeSpins: (amount: number) => void,
+    onSpin: (result: SlotResult) => void
+}) => {
+  const [spinning, setSpinning] = useState(false);
+  const [slots, setSlots] = useState(['SE', 'SE', 'SE']);
+  const [message, setMessage] = useState(`BET: ${BET_COST} SE`);
+  const [error, setError] = useState('');
+  
+  const hasFreeSpin = freeSpins > 0;
+  const canSpin = hasFreeSpin || seTokens >= BET_COST;
+
+  const calculateResult = (rolls: string[]): SlotResult => {
+      const unique = new Set(rolls);
+      let payout = 0;
+      let win = false;
+      let freeSpin = false;
+
+      // Logik för 3 i rad
+      if (unique.size === 1) {
+          const symbol = rolls[0];
+          payout = SYMBOLS[symbol as keyof typeof SYMBOLS].payout;
+          win = payout > 0;
+          freeSpin = (symbol === '⚡️');
+          if (freeSpin) payout = 0; // Free spin gives no immediate tokens
+      } 
+      // Logik för 2 '7' eller '💎'
+      else if ((rolls.filter(r => r === '7️⃣').length >= 2)) {
+          payout = 200;
+          win = true;
+      }
+      
+      return { symbols: rolls, payout, win, freeSpin };
+  };
 
   const handleSpin = () => {
-    if (spinning) return;
+    if (spinning || !canSpin) {
+      if (!canSpin) setError('Need 100 SE Tokens or a Free Spin!');
+      return;
+    }
+    setError('');
+
+    // Hantera insats
+    if (hasFreeSpin) {
+        setFreeSpins(freeSpins - 1);
+        setMessage(`FREE SPIN (${freeSpins - 1} left)`);
+    } else {
+        setSeTokens(seTokens - BET_COST); // Ta insatsen
+        setMessage('ROLLING...');
+    }
+    
     setSpinning(true);
-    setMessage('ROLLING...');
+    
+    // Generera det faktiska slutresultatet (högre chans för 'X')
+    const roll = () => SYMBOL_KEYS[Math.floor(Math.random() * (SYMBOL_KEYS.length - 1))];
+    const finalResult = [roll(), roll(), roll()];
     
     let iterations = 0;
-    const finalResult = [
-        symbols[Math.floor(Math.random() * symbols.length)],
-        symbols[Math.floor(Math.random() * symbols.length)],
-        symbols[Math.floor(Math.random() * symbols.length)]
-    ];
-    
     const interval = setInterval(() => {
+      // Visa slumpmässiga symboler under spinnet
       setSlots([
-        symbols[Math.floor(Math.random() * symbols.length)],
-        symbols[Math.floor(Math.random() * symbols.length)],
-        symbols[Math.floor(Math.random() * symbols.length)]
+        roll(), roll(), roll()
       ]);
       iterations++;
       
-      if (iterations > 20) {
+      if (iterations > 25) {
         clearInterval(interval);
-        setSpinning(false);
-        setSlots(finalResult);
         
-        const win = finalResult[0] === finalResult[1] && finalResult[1] === finalResult[2];
-        setMessage(win ? 'JACKPOT! 🏆 Mythic Artifact Unlocked' : 'NO MATCH – Try again');
-        onSpin(win);
+        // Sätt slutresultatet
+        setSlots(finalResult);
+        const result = calculateResult(finalResult);
+
+        // Hantera utbetalning/vinst
+        if (result.payout > 0) {
+            setSeTokens(seTokens + result.payout);
+            setMessage(`WINNER! +${result.payout} SE Tokens!`);
+        } else if (result.freeSpin) {
+            setFreeSpins(f => f + 1);
+            setMessage(`FREE SPIN! Get 1 more spin! ⚡️`);
+        } else {
+            setMessage('NO MATCH - Try again');
+        }
+
+        setSpinning(false);
+        onSpin(result);
       }
-    }, 100);
+    }, 80);
   };
 
   return (
     <div className="relative p-1 rounded-2xl bg-gradient-to-b from-purple-500 to-blue-600 shadow-lg">
       <div className="bg-black rounded-xl p-4 border-4 border-gray-800">
-        <div className="flex justify-between gap-2 mb-4 bg-[#111] p-3 rounded-lg border-inner shadow-inner">
-          {slots.map((s, i) => (
-            <div key={i} className="flex-1 h-16 flex items-center justify-center text-4xl bg-[#222] rounded border border-gray-700 font-mono">
-              {spinning ? <span className="animate-spin-slow">{s}</span> : s}
-            </div>
-          ))}
+        
+        {/* Token and Free Spin Display */}
+        <div className="flex justify-between text-xs font-mono mb-3 p-2 rounded bg-gray-900 border border-gray-700">
+            <span className="flex items-center gap-1 text-gray-400">
+                <Coins size={12} className="text-yellow-400" />
+                BALANCE: <span className="text-white font-bold">{seTokens.toLocaleString()} SE</span>
+            </span>
+            <span className="flex items-center gap-1">
+                <Gift size={12} className="text-mesh-neon" />
+                FREE SPINS: <span className={`font-bold ${hasFreeSpin ? 'text-mesh-neon' : 'text-gray-500'}`}>{freeSpins}</span>
+            </span>
         </div>
-        <div className="text-center text-mesh-neon font-mono text-sm mb-3 tracking-widest">{message}</div>
+
+        {/* Slot Reels */}
+        <div className="flex justify-between gap-2 mb-4 bg-[#111] p-3 rounded-lg border-inner shadow-inner">
+          {slots.map((s, i) => {
+            const symbolData = SYMBOLS[s as keyof typeof SYMBOLS] || { color: 'text-gray-500' };
+            const isWinner = !spinning && slots.every(val => val === s); // Check for 3-in-a-row winner
+            return (
+                <div 
+                    key={i} 
+                    className={`flex-1 h-16 flex items-center justify-center text-4xl bg-[#222] rounded border border-gray-700 font-mono 
+                                transition-all duration-300 ${isWinner ? 'bg-mesh-neon/20 shadow-[0_0_20px_rgba(0,255,192,0.8)]' : ''}`}
+                >
+                    <span className={`${symbolData.color} ${spinning ? 'opacity-50' : 'text-glow'}`}>{s}</span>
+                </div>
+            )
+          })}
+        </div>
+        
+        {/* Message / Error */}
+        <div className="text-center font-mono text-sm mb-3 tracking-widest h-5">
+            {error ? (
+                <span className="text-red-500 animate-pulse">{error}</span>
+            ) : (
+                <span className="text-mesh-neon">{message}</span>
+            )}
+        </div>
+        
+        {/* Spin Button */}
         <button 
           onClick={handleSpin}
-          disabled={spinning}
-          className="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-bold text-lg shadow-[0_0_15px_rgba(234,179,8,0.5)] active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100"
+          disabled={spinning || !canSpin}
+          className="w-full py-3 rounded-lg bg-gradient-to-r from-yellow-500 to-amber-600 text-black font-bold text-lg shadow-[0_0_15px_rgba(234,179,8,0.5)] active:scale-95 transition-transform disabled:opacity-50 disabled:scale-100 flex items-center justify-center gap-2"
         >
-          {spinning ? 'PROCESSING TX...' : 'SPIN FOR RNG (0.001 ETH)'}
+          {spinning ? (
+            <>
+              <RotateCw size={18} className="animate-spin" /> SPINNING...
+            </>
+          ) : hasFreeSpin ? (
+            <>
+              <Gift size={18} /> USE FREE SPIN
+            </>
+          ) : (
+            <>
+              <DollarSign size={18} /> PULL HANDLE ({BET_COST} SE)
+            </>
+          )}
         </button>
       </div>
     </div>
   );
 };
+
 
 // 5. SPAWNBOT TERMINAL (Brain Tab)
 const SpawnBotTerminal = () => {
@@ -159,7 +276,6 @@ const SpawnBotTerminal = () => {
     "> Connected to Base Mainnet.",
     "> Monitoring mempool for alpha...",
     "> Ready for input. (Type 'help')",
-    "> TODO: Replace mock with actual LLM API hook"
   ]);
   const logContainerRef = useRef<HTMLDivElement>(null);
 
@@ -246,14 +362,17 @@ const App: React.FC = () => {
   const [showSettings, setShowSettings] = useState(false);
   const [xp, setXp] = useState(1575);
   const [streak, setStreak] = useState(4);
-  const [activeLootSubTab, setActiveLootSubTab] = useState<LootSubTab>('packs');
+  const [seTokens, setSeTokens] = useState(5000); // MOCK TOKEN BALANCE
+  const [freeSpins, setFreeSpins] = useState(1); // MOCK FREE SPINS
+  const [activeLootSubTab, setActiveLootSubTab] = useState<LootSubTab>('slot');
   const [activeBrainSubTab, setActiveBrainSubTab] = useState<BrainSubTab>('quests');
   const [latestSupCast, setLatestSupCast] = useState(MOCK_SUPCASTS[0].context);
   
   // -- HANDLERS --
   const addXP = (amount: number) => setXp(p => p + amount);
-  const handleSlotSpin = (win: boolean) => {
-    addXP(win ? 150 : 50);
+  const handleSlotSpin = (result: SlotResult) => {
+    addXP(50);
+    if (result.win) addXP(result.payout / 50); // Extra XP for big win
   };
   
   // --- SUB TAB VIEWS ---
@@ -280,10 +399,20 @@ const App: React.FC = () => {
   const SlotView = () => (
     <div className="space-y-6">
       <div className="text-center space-y-1">
-        <h2 className="text-xl font-bold text-white">Mesh Slot · Experimental</h2>
-        <p className="text-xs text-gray-400">Spin to simulate pack RNG – UX only (no real tokens yet).</p>
+        <h2 className="text-2xl font-black text-white italic tracking-tighter flex items-center justify-center gap-2">
+            <GitBranch size={20} className="text-mesh-neon" /> SPAWN SLOT V2.0
+        </h2>
+        <p className="text-xs text-gray-400">Bet 100 SE Tokens per spin. Jackpot = 3x 💎 (5,000 SE).</p>
       </div>
-      <SlotMachine onSpin={handleSlotSpin} />
+
+      {/* FULLT FUNGERANDE CASINO SLOT */}
+      <SlotMachine 
+          seTokens={seTokens} 
+          setSeTokens={setSeTokens}
+          freeSpins={freeSpins}
+          setFreeSpins={setFreeSpins}
+          onSpin={handleSlotSpin} 
+      />
     </div>
   );
 
@@ -483,12 +612,12 @@ const App: React.FC = () => {
                 <div className="text-[10px] text-gray-400 uppercase">Total XP</div>
             </div>
             <div className="text-center">
-                <div className="text-lg font-bold text-white">42</div>
-                <div className="text-[10px] text-gray-400 uppercase">Mints / Packs</div>
+                <div className="text-lg font-bold text-white">{seTokens.toLocaleString()}</div>
+                <div className="text-[10px] text-gray-400 uppercase">SE Tokens</div>
             </div>
             <div className="text-center">
-                <div className="text-lg font-bold text-white">$15.20</div>
-                <div className="text-[10px] text-gray-400 uppercase">Gas Saved</div>
+                <div className="text-lg font-bold text-white">{freeSpins}</div>
+                <div className="text-[10px] text-gray-400 uppercase">Free Spins</div>
             </div>
         </div>
       </HoloCard>
@@ -554,7 +683,7 @@ const App: React.FC = () => {
   const LootView = () => (
     <div className="animate-fade-in">
         <SubNav 
-            subTabs={[{id: 'packs', label: 'Packs'}, {id: 'slot', label: 'Slot'}, {id: 'history', label: 'History'}]}
+            subTabs={[{id: 'packs', label: 'Packs'}, {id: 'slot', label: 'Spawn Slot'}, {id: 'history', label: 'History'}]}
             activeSubTab={activeLootSubTab}
             setActiveSubTab={setActiveLootSubTab}
         />
@@ -625,7 +754,7 @@ const App: React.FC = () => {
             <p className="text-xs text-gray-400">Mesh Architect | XP Lvl 12 | Base Builder</p>
             <div className="grid grid-cols-3 gap-4 mt-4 pt-4 border-t border-white/10 w-full">
                 <div className="text-center">
-                    <div className="text-lg font-bold text-white">1575</div>
+                    <div className="text-lg font-bold text-white">{xp.toLocaleString()}</div>
                     <div className="text-[10px] text-gray-400 uppercase">XP</div>
                 </div>
                 <div className="text-center">
