@@ -40,7 +40,7 @@
               },
               'float-up': {
                  'from': { transform: 'translateY(100%)', opacity: 0 },
-                 'to': { transform: 'translateY(0)', opacity: 1 }
+                 'to': { transform: translateY(0), opacity: 1 }
               }
             }
           }
@@ -53,7 +53,8 @@
       body {
         background-color: #02040a;
         color: #f8fafc;
-        overflow-x: hidden;
+        /* Ta bort den dolda x-axeln för att möjliggöra plattformslayouten */
+        overflow-x: hidden; 
         -webkit-tap-highlight-color: transparent;
       }
 
@@ -106,7 +107,7 @@
       /* Neon Text Glow */
       .text-glow { text-shadow: 0 0 10px rgba(0, 255, 192, 0.5); }
 
-      /* Använd den keyframe som definierades i Tailwind config */
+      /* Custom animation for sheets */
       .animate-float-up {
         animation: float-up 0.3s ease-out forwards;
       }
