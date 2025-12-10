@@ -124,6 +124,7 @@ const Reel = ({ symbols, reelHeight, spinning }: { symbols: string[], reelHeight
     const isScatter = symbolData.scatter;
 
     // Dynamisk höjd baserat på reelHeight (Megaways-effekt)
+    // Använder 25px per "symbol drop" för att hålla storleken mobilvänlig
     const heightClass = `h-[${reelHeight * 25}px] min-h-[75px] max-h-[175px]`; // 3x25=75px (min 3 symboler) till 7x25=175px (max 7 symboler)
 
     return (
@@ -272,7 +273,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
         }, 60);
     };
 
-    // Anpassad CSS för Neon Scatter Glow
+    // Anpassad CSS för Neon Scatter Glow (Infoga som stilblock eftersom Tailwind inte stöder keyframes utanför config)
     useEffect(() => {
         const style = document.createElement('style');
         style.type = 'text/css';
@@ -298,7 +299,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
                     SpawnEngine Megaways
                 </h3>
                 
-                {/* Info / Progressive Jackpot */}
+                {/* Info / Progressive Jackpot (Matchar bilden) */}
                 <div className="text-center mb-4 p-2 rounded-lg bg-yellow-900/20 border border-yellow-500/30">
                     <span className="text-xs font-mono text-yellow-300">PROGRESSIVE JACKPOT: 500,000+ SE</span>
                 </div>
@@ -321,7 +322,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
                         ))}
                     </div>
 
-                    {/* Slot Handle (Höger sida) */}
+                    {/* Slot Handle (Höger sida) - Förenklad visuell för att matcha app-stilen */}
                     <div className="w-8 flex items-center justify-center">
                         <button onClick={handleSpin} disabled={spinning || !canSpin} className="relative w-full h-1/2 bg-red-600 rounded-full hover:bg-red-500 transition-all active:scale-90 disabled:opacity-50">
                             <div className="w-4 h-4 bg-red-300 rounded-full absolute top-1 left-1/2 -translate-x-1/2 shadow-inner" />
@@ -343,7 +344,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
                 <div className="flex justify-between items-center mt-4 p-2 rounded-lg bg-gray-900/50 border border-gray-700">
                     {/* Bet Display */}
                     <div className="flex flex-col text-xs font-mono text-gray-400">
-                        BET: <span className="text-white font-bold">{BET_COST} SE</span>
+                        BET: <span className="text-white font-bold">{BET_COST} SE}</span>
                     </div>
 
                     {/* Spin Button */}
