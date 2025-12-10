@@ -1,36 +1,23 @@
-import React, { useState, useEffect } from 'react';
-import './styles.css'; // Förutsätter att du har en grundläggande Tailwind-baserad styles.css
+// src/App.tsx - KOMPLETT KOD FÖR ALLA FLIKAR
+import React, { useState } from 'react';
+import './styles.css'; // Används för grundläggande återställningar
 
-// --- ICON IMPORTS (Exempelvis från Lucide React) ---
+// --- ICON IMPORTS (Dessa är nu installerade, bra!) ---
 import { 
-    Home, 
-    Box, 
-    Zap, 
-    User, 
-    Coins, 
-    TrendingUp, 
-    Users, 
-    Package, 
-    History, 
-    Settings, 
-    Award, 
-    Target, 
-    Brain, 
-    ChevronsRight, 
-    CheckCircle,
-    Cpu
+    Home, Box, User, Coins, TrendingUp, Users, Package, History, Settings, Award, 
+    Target, Brain, ChevronsRight, CheckCircle, Cpu, Wifi, Zap, Award as Trophy
 } from 'lucide-react';
 
-// --- STYLED COMPONENTS (FÖRENKLADE FÖR EXEMPEL) ---
+// --- STYLED COMPONENTS (Återanvändbara UI-element) ---
 
-// HoloCard: Din mesh-inspirerade kortstil
+/** HoloCard: Använder Tailwind-klasser och den anpassade mesh-neon färgen från index.html */
 const HoloCard = ({ children, className = '' }) => (
     <div className={`p-4 bg-gray-900/40 border border-white/10 rounded-xl backdrop-blur-sm transition-all duration-300 ${className}`}>
         {children}
     </div>
 );
 
-// PlatformHeader: Rubrik och ikon för varje flik
+/** PlatformHeader: Rubrik och ikon för varje flik */
 const PlatformHeader = ({ title, icon: Icon }) => (
     <div className="flex items-center gap-3 mb-6 pt-2">
         <Icon size={28} className="text-mesh-neon" />
@@ -38,7 +25,7 @@ const PlatformHeader = ({ title, icon: Icon }) => (
     </div>
 );
 
-// SubNav: För Loot och Market
+/** SubNav: För Loot och Market */
 const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
     <div className="flex bg-gray-900/60 p-1 rounded-full border border-white/10 mb-4">
         {subTabs.map(tab => (
@@ -57,20 +44,21 @@ const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
     </div>
 );
 
-// --- 1. SLOT MACHINE (Simulerad från tidigare svar) ---
-const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onSpin }) => {
-    // Förenklad rendering för att spara utrymme
+// --- 1. SLOT MACHINE VIEW ---
+const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => {
     return (
         <HoloCard className="p-6 bg-purple-900/20 border-purple-500/50 shadow-[0_0_20px_rgba(168,85,247,0.3)]">
-            <h2 className="text-xl font-black text-white mb-3">🎰 SpawnEngine Megaways</h2>
+            <h2 className="text-xl font-black text-white mb-3 flex items-center gap-2">
+                <Trophy size={20} className="text-yellow-400"/> 🎰 SpawnEngine Megaways
+            </h2>
             <div className="flex justify-between text-lg font-mono mb-4">
                 <span className="text-gray-400">Tokens: <span className="text-mesh-neon">{seTokens}</span></span>
                 <span className="text-gray-400">Free Spins: <span className="text-purple-400">{freeSpins}</span></span>
             </div>
             
-            {/* Simulerad Reels Area */}
-            <div className="bg-gray-900/70 h-24 rounded-lg flex items-center justify-center mb-4 border border-white/5">
-                <span className="text-3xl text-gray-700 font-bold">REELS AREA</span>
+            {/* Reels Area - Håller samma storlek som dina kort för en enhetlig layout */}
+            <div className="bg-gray-900/70 h-28 rounded-lg flex items-center justify-center mb-4 border border-white/5">
+                <span className="text-4xl text-gray-700 font-bold">SPIN</span>
             </div>
 
             <button
@@ -85,8 +73,7 @@ const SpawnSlotMegaways = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, onS
     );
 };
 
-
-// --- 2. MARKET VIEW COMPONENTS (Från föregående svar) ---
+// --- 2. MARKET VIEW COMPONENTS ---
 const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
     const isPositive = change >= 0;
     const historyData = [10, 15, 12, 18, 25, 20, 30, 22, 28, 35, 32, 40].map(val => val + (isPositive ? 0 : 5));
@@ -138,26 +125,30 @@ const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
 
 // --- 3. CORE VIEWS ---
 
-// --- A. HOME VIEW ---
+// --- A. HOME VIEW (Overview) ---
 const HomeView = ({ seTokens, currentXP }) => (
     <div className="space-y-5 animate-fade-in">
         <PlatformHeader title="SpawnEngine" icon={Home} />
         
-        <HoloCard className="p-5 bg-blue-900/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)]">
-            <h2 className="text-2xl font-black text-white mb-2">My Balance</h2>
-            <div className="flex justify-between items-end">
-                <div>
-                    <p className="text-4xl font-mono font-extrabold text-mesh-neon">{seTokens}</p>
-                    <p className="text-sm text-gray-400">SE Tokens</p>
-                </div>
-                <div className="text-right">
-                    <p className="text-2xl font-mono font-extrabold text-white">{currentXP}</p>
-                    <p className="text-sm text-gray-400">Total XP</p>
-                </div>
+        {/* Kontokort: Matchar layouten från din första skärmdump (Mesh Profile) */}
+        <HoloCard className="p-5 bg-blue-900/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] grid grid-cols-2 gap-4">
+            <div>
+                <p className="text-xs text-gray-400">XP Streak</p>
+                <p className="text-3xl font-mono font-extrabold text-mesh-neon">{currentXP}</p>
+                <p className="text-xs text-gray-500">Daily tasks completed</p>
+            </div>
+            <div>
+                <p className="text-xs text-gray-400">Spawn Balance</p>
+                <p className="text-3xl font-mono font-extrabold text-white">{seTokens}</p>
+                <p className="text-xs text-gray-500">Test rewards from packs</p>
+            </div>
+            <div className="col-span-2 pt-3 border-t border-white/10">
+                <p className="text-xs text-gray-400 flex items-center gap-1"><Zap size={12} className="text-yellow-400" /> Today's Loop</p>
+                <p className="text-sm text-white font-bold mt-1">9 pack_open · mints · swaps</p>
             </div>
         </HoloCard>
 
-        <h3 className="text-lg font-bold text-gray-300 mt-6">Active Quests</h3>
+        <h3 className="text-lg font-bold text-gray-300 mt-6 flex items-center gap-2"><Target size={18} className="text-yellow-400" /> Active Quests</h3>
         <div className="space-y-3">
             {[
                 { title: "Connect Wallet", progress: 1, max: 1, reward: "+100 XP" },
@@ -181,7 +172,7 @@ const HomeView = ({ seTokens, currentXP }) => (
 );
 
 
-// --- B. LOOT VIEW ---
+// --- B. LOOT VIEW (Packs, Slot, History) ---
 const PacksView = ({ openPack }) => (
     <div className="space-y-4">
         <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
@@ -201,20 +192,16 @@ const PacksView = ({ openPack }) => (
     </div>
 );
 
-const SlotView = ({ seTokens, setSeTokens, freeSpins, setFreeSpins, handleSlotSpin }) => (
+const SlotView = ({ seTokens, freeSpins, handleSlotSpin }) => (
     <div className="space-y-4">
-        {/* SpawnEngine Megaways Slot */}
         <SpawnSlotMegaways 
             seTokens={seTokens} 
-            setSeTokens={setSeTokens}
             freeSpins={freeSpins}
-            setFreeSpins={setFreeSpins}
             onSpin={handleSlotSpin} 
         />
     </div>
 );
 
-// NY: HistoryView
 const HistoryView = ({ historyData }) => (
     <div className="space-y-4">
         <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
@@ -239,7 +226,7 @@ const HistoryView = ({ historyData }) => (
     </div>
 );
 
-const LootView = ({ activeLootSubTab, setActiveLootSubTab, seTokens, setSeTokens, freeSpins, setFreeSpins, handleSlotSpin, handleOpenPack, historyData }) => (
+const LootView = ({ activeLootSubTab, setActiveLootSubTab, seTokens, freeSpins, handleSlotSpin, handleOpenPack, historyData }) => (
     <div className="space-y-5 animate-fade-in">
         <PlatformHeader title="Loot" icon={Box} />
         
@@ -253,9 +240,7 @@ const LootView = ({ activeLootSubTab, setActiveLootSubTab, seTokens, setSeTokens
         {activeLootSubTab === 'slot' && (
             <SlotView 
                 seTokens={seTokens} 
-                setSeTokens={setSeTokens} 
                 freeSpins={freeSpins} 
-                setFreeSpins={setFreeSpins} 
                 handleSlotSpin={handleSlotSpin} 
             />
         )}
@@ -264,7 +249,7 @@ const LootView = ({ activeLootSubTab, setActiveLootSubTab, seTokens, setSeTokens
 );
 
 
-// --- C. MARKET VIEW (Uppdaterad från föregående svar) ---
+// --- C. MARKET VIEW ---
 const MarketView = ({ activeMarketSubTab, setActiveMarketSubTab }) => {
     const MOCK_ZORA_COINS = [
         { name: "SpawnEngine Vibe", ticker: "SEVZ", price: 0.005, change: 8.45, holders: "5.1K" },
@@ -329,7 +314,7 @@ const MarketView = ({ activeMarketSubTab, setActiveMarketSubTab }) => {
 };
 
 
-// --- D. BRAIN VIEW (NY: Quests & AI) ---
+// --- D. BRAIN VIEW ---
 const BrainView = () => (
     <div className="space-y-5 animate-fade-in">
         <PlatformHeader title="Brain" icon={Brain} />
@@ -375,10 +360,10 @@ const BrainView = () => (
 );
 
 
-// --- E. PROFILE VIEW (NY: Baserat på din Settings-bild) ---
+// --- E. PROFILE VIEW (Settings & API) ---
 const ProfileView = () => (
     <div className="space-y-5 animate-fade-in">
-        {/* Använder din önskade look/struktur från bilden */}
+        {/* Profile Header (Matchar exakt layouten från den andra bilden) */}
         <div className="flex items-center gap-3 pt-2 mb-6">
             <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xl">S</div>
             <div>
@@ -389,16 +374,17 @@ const ProfileView = () => (
                     <span className="text-mesh-neon font-bold">Mesh v1.0 PRO</span>
                 </div>
             </div>
-            <Settings size={20} className="text-gray-500 ml-auto cursor-pointer hover:text-white" />
+            {/* Settings-ikonen flyttar sig till höger, matchar bilden */}
+            <Settings size={20} className="text-gray-500 ml-auto cursor-pointer hover:text-white" /> 
         </div>
 
         <h1 className="text-3xl font-black text-white mb-6">Settings & API</h1>
 
-        {/* XP SDK & Integration (Pillar 1) */}
+        {/* XP SDK & Integration (Pillar 1) - Matchar bildens knappfärg */}
         <HoloCard className="p-5 bg-gray-900/50 border-mesh-neon/30">
             <h3 className="text-lg font-bold text-white mb-2">XP SDK & Integration (Pillar 1)</h3>
             <p className="text-sm text-gray-400 mb-4">Manage API keys to integrate SpawnEngine XP into your own apps.</p>
-            <button className="w-full py-3 text-sm font-bold rounded-lg bg-mesh-neon text-black hover:bg-green-300 transition-colors">
+            <button className="w-full py-3 text-sm font-bold rounded-lg bg-green-500 text-black hover:bg-green-400 transition-colors">
                 Show API Key
             </button>
         </HoloCard>
@@ -434,14 +420,15 @@ const ProfileView = () => (
 // --- MAIN APP COMPONENT ---
 
 const App: React.FC = () => {
+    // Initial State (använder mock-värden från dina skärmdumpar)
     const [activeTab, setActiveTab] = useState<'home' | 'loot' | 'market' | 'brain' | 'profile'>('home');
     const [activeLootSubTab, setActiveLootSubTab] = useState<'packs' | 'slot' | 'history'>('packs');
     const [activeMarketSubTab, setActiveMarketSubTab] = useState<'trending' | 'creators' | 'zora'>('trending');
     
     // Global State
-    const [seTokens, setSeTokens] = useState(1500);
+    const [seTokens, setSeTokens] = useState(497); // Spawn Balance
     const [freeSpins, setFreeSpins] = useState(5);
-    const [currentXP, setCurrentXP] = useState(1575);
+    const [currentXP, setCurrentXP] = useState(1575); // XP Streak
     const [history, setHistory] = useState([
         { date: "2025-12-10", type: "Slot Win", result: "+1500 SE Tokens", xp: "+150 XP" }, 
         { date: "2025-12-09", type: "Mint", result: "Zora Drop #443", xp: "+80 XP" }
@@ -455,7 +442,7 @@ const App: React.FC = () => {
 
         if (freeSpins > 0) {
             setFreeSpins(fs => fs - 1);
-            win = Math.random() < 0.6; // Higher win chance on Free Spins
+            win = Math.random() < 0.6; 
         } else if (seTokens >= 10) {
             setSeTokens(t => t - 10);
             win = Math.random() < 0.3;
@@ -465,7 +452,7 @@ const App: React.FC = () => {
         }
 
         if (win) {
-            tokensGained = Math.floor(Math.random() * 50) + 50; // 50-100 Tokens
+            tokensGained = Math.floor(Math.random() * 50) + 50; 
             xpGained = 20;
             setSeTokens(t => t + tokensGained);
             setCurrentXP(xp => xp + xpGained);
@@ -484,7 +471,6 @@ const App: React.FC = () => {
     };
     
     const handleOpenPack = () => {
-        // Simulerad packöppning
         const tokensGained = Math.floor(Math.random() * 200) + 100;
         const freeSpinsGained = Math.floor(Math.random() * 3) + 1;
         const xpGained = 50;
@@ -512,9 +498,7 @@ const App: React.FC = () => {
                         activeLootSubTab={activeLootSubTab} 
                         setActiveLootSubTab={setActiveLootSubTab}
                         seTokens={seTokens} 
-                        setSeTokens={setSeTokens}
                         freeSpins={freeSpins}
-                        setFreeSpins={setFreeSpins}
                         handleSlotSpin={handleSlotSpin}
                         handleOpenPack={handleOpenPack}
                         historyData={history}
@@ -532,14 +516,23 @@ const App: React.FC = () => {
     };
 
     return (
+        // Använder flex för att centrera innehållet och pusha navbaren till botten
         <div className="min-h-screen bg-black text-white font-sans flex flex-col items-center">
-            <div className="w-full max-w-md p-4 pb-20 relative">
+            {/* Neural Mesh Background Animation (Från index.html) */}
+            <div className="neural-bg">
+                <div className="orb orb-1"></div>
+                <div className="orb orb-2"></div>
+                <div className="orb orb-3"></div>
+                <div className="grid-overlay"></div>
+            </div>
+
+            <div className="w-full max-w-md p-4 pb-20 relative z-10">
                 {/* Dynamiskt innehåll baserat på vald flik */}
                 {renderContent()}
             </div>
             
             {/* Bottom Navigation Bar */}
-            <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-gray-900/90 backdrop-blur-md border-t border-white/10 p-2 flex justify-around">
+            <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-gray-900/90 backdrop-blur-md border-t border-white/10 p-2 flex justify-around z-50">
                 {[
                     { id: 'home', icon: Home, label: 'Home' },
                     { id: 'loot', icon: Box, label: 'Loot' },
