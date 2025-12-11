@@ -1,9 +1,7 @@
-// src/App.tsx - Kompakt SpawnEngine Layout & Funktionalitet (v2)
+// src/App.tsx - Kompakt SpawnEngine Layout & Funktionalitet
 
 import React, { useState } from 'react';
-// Importa styles.css för de globala variablerna
 import './styles.css'; 
-// OBS: Importerna av lucide-react-ikoner behålls intakta
 import { 
     Home, Box, User, Coins, TrendingUp, Users, Package, History, Settings, Award, 
     Target, Brain, ChevronsRight, CheckCircle, Cpu, Zap, Award as Trophy 
@@ -11,9 +9,8 @@ import {
 
 // --- STYLED COMPONENTS (Nu Mycket Mer Kompakt) ---
 
-/** CompactCard: Använder nu de nya färgvariablerna från index.html (spawn-*) */
+/** CompactCard: Använder nu de nya färgvariablerna från tailwind.config.js */
 const CompactCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-    // Byter ut HoloCard mot den kompakta, platta looken
     <div className={`p-3 bg-spawn-card border border-spawn-border rounded-lg transition-all duration-300 ${className}`}>
         {children}
     </div>
@@ -50,7 +47,6 @@ const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
 // --- 1. HOME VIEW (Mesh Profile - MEST KOMPRIMERAD) ---
 const HomeView = ({ seTokens, currentXP }) => (
     <div className="space-y-3 animate-fade-in">
-        {/* Huvud Rubrik tas bort (finns i ProfileView) för att matcha den kompakta bildens känsla */}
         
         {/* Mesh Profile Card (Matchar den kompakta bildens layout) */}
         <CompactCard className="grid grid-cols-3 gap-2 p-2 bg-[#12151a] border-spawn-primary/50 shadow-[0_0_8px_rgba(0,208,255,0.1)]">
@@ -115,8 +111,6 @@ const HomeView = ({ seTokens, currentXP }) => (
 );
 
 
-// --- ÖVRIGA VIEWS ANPASSAS FÖR KOMPAKT STIL ---
-
 // Slot View anpassas
 const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => {
     return (
@@ -144,10 +138,69 @@ const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => {
         </CompactCard>
     );
 };
+
+// Loot View anpassas för att använda SectionTitle
+const PacksView = ({ openPack }) => (
+    <div className="space-y-4">
+        <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+            <Package size={16} className="text-white" /> Available Packs
+        </h3>
+        <CompactCard className="text-center p-6 bg-red-900/20 border-red-500/50">
+            <p className="text-3xl font-black text-white mb-2">1x ALPHA PACK</p>
+            <p className="text-sm text-gray-400">Guaranteed Creator Token Fragment.</p>
+            <button 
+                onClick={openPack}
+                className="w-full mt-4 py-3 text-lg font-black rounded-lg 
+                           bg-red-500 text-white hover:bg-red-600 transition-colors"
+            >
+                OPEN PACK
+            </button>
+        </CompactCard>
+    </div>
+);
+
+const HistoryView = ({ historyData }) => (
+    <div className="space-y-4">
+        <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
+            <History size={16} className="text-yellow-400" /> Recent Activity Log
+        </h3>
+        <div className="space-y-2">
+            {historyData.map((item, i) => (
+                <CompactCard key={i} className="p-3 flex justify-between items-center bg-gray-900/50 border-white/5">
+                    <div className="flex-1">
+                        <p className="text-sm font-bold text-white">{item.type}</p>
+                        <p className="text-xs text-gray-500">{item.date}</p>
+                    </div>
+                    <div className="text-right">
+                        <p className={`text-sm font-bold ${item.result.startsWith('+') ? 'text-spawn-success' : 'text-red-400'}`}>
+                            {item.result}
+                        </p>
+                        <p className="text-xs text-purple-400">{item.xp}</p>
+                    </div>
+                </CompactCard>
+            ))}
+        </div>
+    </div>
+);
+
+
+const LootView = ({ activeLootSubTab, setActiveLootSubTab, seTokens, freeSpins, handleSlotSpin, handleOpenPack, historyData }) => (
+    <div className="space-y-4 animate-fade-in">
+        <SectionTitle title="Loot" icon={Box} />
+        <SubNav 
+            subTabs={[{id: 'packs', label: 'Packs'}, {id: 'slot', label: 'Spawn Slot'}, {id: 'history', label: 'History'}]}
+            activeSubTab={activeLootSubTab}
+            setActiveSubTab={setActiveLootSubTab}
+        />
+        {activeLootSubTab === 'packs' && <PacksView openPack={handleOpenPack} />}
+        {activeLootSubTab === 'slot' && (<SpawnSlotMegaways seTokens={seTokens} freeSpins={freeSpins} onSpin={handleSlotSpin} />)}
+        {activeLootSubTab === 'history' && <HistoryView historyData={historyData} />}
+    </div>
+);
+
 // Market View anpassas
 const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
     const isPositive = change >= 0;
-    // ... (Sparkline-logik behålls) ...
     const historyData = [10, 15, 12, 18, 25, 20, 30, 22, 28, 35, 32, 40].map(val => val + (isPositive ? 0 : 5));
     
     const Sparkline = () => (
@@ -174,7 +227,7 @@ const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
                 </div>
                 <div className="text-right">
                     <div className="text-sm font-bold text-white">{price} ETH</div>
-                    <div className={`text-xs font-mono font-bold ${isPositive ? 'text-spawn-success' : 'text-danger'}`}>
+                    <div className={`text-xs font-mono font-bold ${isPositive ? 'text-spawn-success' : 'text-red-400'}`}>
                         {isPositive ? '+' : ''}{change.toFixed(2)}%
                     </div>
                 </div>
@@ -187,15 +240,127 @@ const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
                 </div>
                 <Sparkline />
             </div>
+            <button className="w-full mt-3 py-1.5 text-xs font-bold rounded-lg bg-purple-500/30 text-purple-400 border border-purple-500/50 hover:bg-purple-500/50 transition-colors">
+                Trade on Mesh DEX
+            </button>
         </CompactCard>
     );
 };
 
+const MarketView = ({ activeMarketSubTab, setActiveMarketSubTab }) => {
+    const MOCK_ZORA_COINS = [
+        { name: "SpawnEngine Vibe", ticker: "SEVZ", price: 0.005, change: 8.45, holders: "5.1K" },
+        { name: "Base Builder DAO", ticker: "BDAO", price: 0.012, change: -3.11, holders: "2.8K" },
+    ];
 
-// Profile View anpassas (Redan kompakt, men använder nya färger)
+    return (
+        <div className="space-y-4 animate-fade-in">
+            <SectionTitle title="Market" icon={Coins} />
+            
+            <SubNav 
+                subTabs={[{id: 'trending', label: 'Trending'}, {id: 'creators', label: 'Creators'}, {id: 'zora', label: 'Zora Coins'}]}
+                activeSubTab={activeMarketSubTab}
+                setActiveSubTab={setActiveMarketSubTab}
+            />
+
+            {activeMarketSubTab === 'trending' && (
+                <>
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <TrendingUp size={16} className="text-red-500" /> HOT TRENDING (Drops)
+                    </h3>
+                    <div className="space-y-3">
+                        {[{name: "VibeMarket Booster", price: "0.025 ETH", participants: "1.2K"},
+                          {name: "Creator Token · $SPAWNIZ", price: "0.001 ETH", participants: "500"}]
+                          .map((item, i) => (
+                            <CompactCard key={i} className="p-3 flex justify-between items-center cursor-pointer hover:border-red-500/50">
+                              <div>
+                                <div className="text-sm font-bold text-white">{item.name}</div>
+                                <div className="text-[10px] text-gray-400">P: {item.participants} | {item.price}</div>
+                              </div>
+                              <button className="px-3 py-1 text-xs rounded-full bg-spawn-primary text-black font-bold">
+                                VIEW
+                              </button>
+                            </CompactCard>
+                          ))}
+                    </div>
+                </>
+            )}
+
+            {activeMarketSubTab === 'zora' && (
+                <div className="space-y-3">
+                    <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                        <Coins size={16} className="text-purple-400" /> TOP CREATOR COINS
+                    </h3>
+                    {MOCK_ZORA_COINS.map((coin, i) => (
+                        <ZoraCoinTrackerCard key={i} {...coin} />
+                    ))}
+                </div>
+            )}
+            
+            {activeMarketSubTab === 'creators' && (
+                <CompactCard className="p-4 text-center">
+                    <h3 className="text-lg font-bold text-spawn-primary">Creator Hub</h3>
+                    <p className="text-sm text-gray-400 mt-2">Discover, Follow, and Support Top Mesh Builders.</p>
+                    <button className="mt-4 px-4 py-2 text-sm rounded-full bg-spawn-primary/20 text-spawn-primary border border-spawn-primary/50">
+                        View Creator Leaderboard
+                    </button>
+                </CompactCard>
+            )}
+        </div>
+    );
+};
+
+
+// Brain View anpassas
+const BrainView = () => (
+    <div className="space-y-4 animate-fade-in">
+        <SectionTitle title="Brain" icon={Brain} />
+        
+        <CompactCard className="p-5 bg-green-900/20 border-green-500/50">
+            <div className="flex justify-between items-center mb-3">
+                <h2 className="text-xl font-black text-white">AI Assistant Status</h2>
+                <span className="text-xs font-mono text-spawn-success flex items-center gap-1"><Cpu size={14} /> ONLINE</span>
+            </div>
+            <p className="text-sm text-gray-400">Ask the Mesh Brain about your stats, quests, or new drops.</p>
+            <div className="mt-4 flex gap-2">
+                <input type="text" placeholder="Ask a question..." className="flex-1 p-2 text-sm bg-gray-800/80 rounded-lg text-white border border-white/10 focus:border-green-500/50 outline-none" />
+                <button className="p-2 bg-green-500/30 rounded-lg text-green-400 border border-green-500/50 hover:bg-green-500/50 transition-colors">
+                    <ChevronsRight size={18} />
+                </button>
+            </div>
+        </CompactCard>
+        
+        <h3 className="text-lg font-bold text-gray-300 mt-6 flex items-center gap-2">
+            <Target size={18} className="text-yellow-400" /> Weekly Bounties
+        </h3>
+        <div className="space-y-3">
+            {[
+                { title: "Mint 3 Zora NFTs", reward: "+500 SE Tokens", completed: false },
+                { title: "Achieve 500 XP this week", reward: "+1 Alpha Pack", completed: true },
+                { title: "Trade 1 Creator Coin", reward: "+2 Free Spins", completed: false },
+            ].map((bounty, i) => (
+                <CompactCard key={i} className={`flex justify-between items-center ${bounty.completed ? 'bg-gray-800/70 border-green-500/30' : 'hover:border-white/20'}`}>
+                    <div>
+                        <p className={`text-sm font-bold ${bounty.completed ? 'text-green-500 line-through' : 'text-white'}`}>{bounty.title}</p>
+                        <p className="text-xs text-gray-500">{bounty.reward}</p>
+                    </div>
+                    {bounty.completed && <CheckCircle size={20} className="text-green-500" />}
+                    {!bounty.completed && (
+                        <button className="px-3 py-1 text-xs rounded-full bg-yellow-500/20 text-yellow-400 border border-yellow-500/50">
+                            VIEW
+                        </button>
+                    )}
+                </CompactCard>
+            ))}
+        </div>
+    </div>
+);
+
+
+// Profile View anpassas
 const ProfileView = () => (
     <div className="space-y-4 animate-fade-in">
-        {/* Profile Header (Matchar exakt layouten från bilden) */}
+        {/* Profile Header (Kompakt) */}
         <div className="flex items-center gap-3 pt-2 mb-4">
             <div className="w-9 h-9 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-base">S</div>
             <div className="flex-1">
@@ -258,11 +423,58 @@ const App: React.FC = () => {
         { date: "2025-12-09", type: "Mint", result: "Zora Drop #443", xp: "+80 XP" }
     ]);
     
-    // (Handle slot spin & Handle open pack functions BEHÅLLS OINTAKTA)
-    const handleSlotSpin = () => { /* ... din logik ... */ };
-    const handleOpenPack = () => { /* ... din logik ... */ };
+    // HANDLERS
+    const handleSlotSpin = () => { 
+        let win = false;
+        let tokensGained = 0;
+        let xpGained = 0;
 
-    // ... (övriga renderContent, LootView, MarketView, BrainView, HistoryView BEHÅLLS, men använder CompactCard/SectionTitle)
+        if (freeSpins > 0) {
+            setFreeSpins(fs => fs - 1);
+            win = Math.random() < 0.6; 
+        } else if (seTokens >= 10) {
+            setSeTokens(t => t - 10);
+            win = Math.random() < 0.3;
+        } else {
+            alert("Insufficient SE Tokens!");
+            return;
+        }
+
+        if (win) {
+            tokensGained = Math.floor(Math.random() * 50) + 50; 
+            xpGained = 20;
+            setSeTokens(t => t + tokensGained);
+            setCurrentXP(xp => xp + xpGained);
+            setHistory(h => [
+                { date: new Date().toLocaleDateString(), type: "Slot Win", result: `+${tokensGained} SE Tokens`, xp: `+${xpGained} XP` },
+                ...h
+            ]);
+        } else {
+            xpGained = 5;
+            setCurrentXP(xp => xp + xpGained);
+            setHistory(h => [
+                { date: new Date().toLocaleDateString(), type: "Slot Loss", result: `-10 SE Tokens`, xp: `+${xpGained} XP` },
+                ...h
+            ]);
+        }
+    };
+    
+    const handleOpenPack = () => {
+        const tokensGained = Math.floor(Math.random() * 200) + 100;
+        const freeSpinsGained = Math.floor(Math.random() * 3) + 1;
+        const xpGained = 50;
+        
+        setSeTokens(t => t + tokensGained);
+        setFreeSpins(fs => fs + freeSpinsGained);
+        setCurrentXP(xp => xp + xpGained);
+        
+        alert(`Pack Opened! Gained ${tokensGained} SE Tokens and ${freeSpinsGained} Free Spins.`);
+
+        setHistory(h => [
+            { date: new Date().toLocaleDateString(), type: "Pack Open", result: `+${tokensGained} SE Tokens`, xp: `+${xpGained} XP` },
+            ...h
+        ]);
+    }
 
     // --- RENDER LOGIC ---
     const renderContent = () => {
@@ -270,67 +482,21 @@ const App: React.FC = () => {
             case 'home':
                 return <HomeView seTokens={seTokens} currentXP={currentXP} />;
             case 'loot':
-                // OBS: Måste uppdatera LootView för att använda de nya komponenterna
                 return (
-                    <div className="space-y-4 animate-fade-in">
-                        <SectionTitle title="Loot" icon={Box} />
-                        <SubNav 
-                            subTabs={[{id: 'packs', label: 'Packs'}, {id: 'slot', label: 'Spawn Slot'}, {id: 'history', label: 'History'}]}
-                            activeSubTab={activeLootSubTab}
-                            setActiveSubTab={setActiveLootSubTab}
-                        />
-                        {activeLootSubTab === 'packs' && <PacksView openPack={handleOpenPack} />}
-                        {activeLootSubTab === 'slot' && (<SpawnSlotMegaways seTokens={seTokens} freeSpins={freeSpins} onSpin={handleSlotSpin} />)}
-                        {activeLootSubTab === 'history' && <HistoryView historyData={history} />}
-                    </div>
+                    <LootView 
+                        activeLootSubTab={activeLootSubTab} 
+                        setActiveLootSubTab={setActiveLootSubTab}
+                        seTokens={seTokens} 
+                        freeSpins={freeSpins}
+                        handleSlotSpin={handleSlotSpin}
+                        handleOpenPack={handleOpenPack}
+                        historyData={history}
+                    />
                 );
             case 'market':
-                // OBS: Måste uppdatera MarketView för att använda de nya komponenterna
-                return (
-                    <div className="space-y-4 animate-fade-in">
-                        <SectionTitle title="Market" icon={Coins} />
-                        <SubNav 
-                            subTabs={[{id: 'trending', label: 'Trending'}, {id: 'creators', label: 'Creators'}, {id: 'zora', label: 'Zora Coins'}]}
-                            activeSubTab={activeMarketSubTab}
-                            setActiveSubTab={setActiveMarketSubTab}
-                        />
-                        {activeMarketSubTab === 'trending' && (
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
-                                    <TrendingUp size={16} className="text-red-500" /> HOT TRENDING
-                                </h3>
-                                {/* ... (Trending Cards BEHÅLLS men använder CompactCard) */}
-                            </div>
-                        )}
-                        {activeMarketSubTab === 'zora' && (
-                            <div className="space-y-3">
-                                <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
-                                    <Coins size={16} className="text-purple-400" /> TOP CREATOR COINS
-                                </h3>
-                                {[{ name: "SpawnEngine Vibe", ticker: "SEVZ", price: 0.005, change: 8.45, holders: "5.1K" },
-                                  { name: "Base Builder DAO", ticker: "BDAO", price: 0.012, change: -3.11, holders: "2.8K" }]
-                                  .map((coin, i) => (<ZoraCoinTrackerCard key={i} {...coin} />))}
-                            </div>
-                        )}
-                        {activeMarketSubTab === 'creators' && (
-                            <CompactCard className="p-4 text-center">
-                                <h3 className="text-lg font-bold text-spawn-primary">Creator Hub</h3>
-                                <p className="text-sm text-gray-400 mt-2">Discover, Follow, and Support Top Mesh Builders.</p>
-                                <button className="mt-4 px-4 py-2 text-sm rounded-full bg-spawn-primary/20 text-spawn-primary border border-spawn-primary/50">
-                                    View Creator Leaderboard
-                                </button>
-                            </CompactCard>
-                        )}
-                    </div>
-                );
+                return <MarketView activeMarketSubTab={activeMarketSubTab} setActiveMarketSubTab={setActiveMarketSubTab} />;
             case 'brain':
-                // OBS: Måste uppdatera BrainView för att använda de nya komponenterna
-                return (
-                    <div className="space-y-4 animate-fade-in">
-                        <SectionTitle title="Brain" icon={Brain} />
-                        {/* ... (BrainView Content BEHÅLLS men använder CompactCard/SectionTitle) */}
-                    </div>
-                );
+                return <BrainView />;
             case 'profile':
                 return <ProfileView />;
             default:
@@ -351,7 +517,7 @@ const App: React.FC = () => {
                 <div className="grid-overlay"></div>
             </div>
             
-            {/* Huvud Header (NY: Använder nu Tailwinds 'sticky' för att imitera din compact-header) */}
+            {/* Huvud Header (Sticky Top) */}
             <header className="sticky top-0 z-50 w-full max-w-md bg-spawn-bg/90 backdrop-blur-sm border-b border-spawn-border">
                 <div className="flex justify-between items-center p-3">
                     <h1 className="text-xl font-bold text-spawn-primary">SPAWNENGINE</h1>
@@ -367,12 +533,12 @@ const App: React.FC = () => {
             </header>
 
 
-            {/* Innehållet MÅSTE vara ovanför bakgrunden (z-10) och centrerat (max-w-md) */}
+            {/* Innehållet */}
             <div className="w-full max-w-md p-3 pb-20 relative z-10">
                 {renderContent()}
             </div>
             
-            {/* Bottom Navigation Bar (Fast längst ner, centrerad) */}
+            {/* Bottom Navigation Bar (Fast längst nere) */}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-gray-900/90 backdrop-blur-md border-t border-spawn-border p-2 flex justify-around z-50">
                 {[
                     { id: 'home', icon: Home, label: 'Home' },
