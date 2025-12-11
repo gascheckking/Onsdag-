@@ -1,192 +1,74 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-eval' https://cdn.jsdelivr.net https://unpkg.com; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' https://base-mainnet.g.alchemy.com wss://*.walletconnect.com wss://*.walletconnect.org;">
-  <title>SpawnEngine - Onchain OS</title>
-  <link rel="stylesheet" href="style.css" />
-  <link rel="icon" type="image/x-icon" href="/favicon.ico">
-  <meta name="alchemy-key" content="aH4-X2bNp1BarPcBcHiWR6vHxJz_lGbA">
-  <meta name="etherscan-key" content="Y1VRJKQB1A4K2JTA8GE1YDH3W54W4I35D5">
-</head>
-<body>
-  <div id="onboardingOverlay" class="fade-in-logo">
-    <div class="onboarding-content">
-      <img src="logo.png" alt="SpawnEngine Logo" />
-      <h1 style="color: #00d0ff; margin-top: 1rem;">SpawnEngine OS</h1>
-    </div>
-  </div>
-
-  <div id="appContent" style="display: none;">
-    <header class="app-header">
-      <div class="logo-title">
-        <h1 class="app-title-compact">SPAWNENGINE</h1>
-      </div>
-      <div class="wallet-ui">
-        <div class="wallet-status">
-          <span id="xpDisplay" class="xp-display-compact">0 XP 🔥</span>
-          <div id="walletUI">
-            <span id="walletAddress" class="wallet-address-compact">Not Connected</span>
-            <button id="connectWallet" class="connect-wallet-compact">Connect Wallet</button>
-          </div>
-        </div>
-        <div class="settings-wrapper">
-          <button id="settingsBtn" class="settings-icon">⚙️</button>
-          <div id="settingsMenu" class="settings-dropdown">
-            <button>🚪 Disconnect</button>
-          </div>
-        </div>
-      </div>
-    </header>
+  <head>
+    <meta charset="UTF-8" />
+    <title>SpawnEngine · Mesh OS</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
     
-    <div class="compact-header-bar">
-        <span class="header-label">XP</span>
-        <span class="header-value" id="totalXPCompact">1575</span>
-        <span class="header-label">SPAWN</span>
-        <span class="header-value" id="spawnBalanceCompact">497</span>
-        <span class="header-label">MODE</span>
-        <span class="header-value">v0.2</span>
-        <button class="header-button">9 events</button>
-    </div>
+    <style>
+      /* Global Styles */
+      body {
+        /* Använder den nya mörka bakgrundsfärgen */
+        background-color: #0c0f14; 
+        color: #f8fafc;
+        overflow-x: hidden; 
+        -webkit-tap-highlight-color: transparent;
+      }
 
-    <nav class="nav-tabs compact-tabs">
-      <button class="tab-button active" data-tab="track">📈 Spawn Tracker</button>
-      <button class="tab-button" data-tab="home">🏠 Mesh Profile</button>
-      <button class="tab-button" data-tab="rewards">🎁 Rewards</button>
-      <button class="tab-button" data-tab="premium">💎 Premium</button>
-      <button class="tab-button" data-tab="profile">👤 Settings</button>
-    </nav>
+      /* Custom Scrollbar */
+      ::-webkit-scrollbar { width: 4px; }
+      ::-webkit-scrollbar-track { background: transparent; }
+      ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 4px; }
+      ::-webkit-scrollbar-thumb:hover { background: #334155; }
 
-    <main>
-      <section class="tab-content track" data-tab="track" style="display: block;">
-        <h2 class="section-title-compact">📈 Onchain Activity Tracker</h2>
-        <div class="card-grid track-grid-compact">
-          <div class="card dark compact-card">
-            <h3>⛽ Gas Overview</h3>
-            <p><strong>Base Fee:</strong> <span id="baseGas">--</span> Gwei</p>
-            <p><strong>Avg Gas:</strong> <span id="avgGas">-- Gwei</span></p>
-          </div>
-          <div class="card dark compact-card">
-            <h3>📊 Volume (30D)</h3>
-            <p><span id="volume30d">$0</span></p>
-            <p><strong>PnL Today:</strong> <span id="pnlToday">+ $0.00</span></p>
-          </div>
-          <div class="card dark full compact-card">
-            <div class="track-header-row">
-              <h3>📜 Latest Activity (Log)</h3>
-              <button id="refreshTrackBtn">↻</button>
-            </div>
-            <p id="latestActivity">No recent tx</p>
-            <small id="activityResult">$0</small>
-          </div>
-          <div class="card dark full compact-card">
-            <h3>📦 Tokens/Mints (30D)</h3>
-            <p>Total Mints: <span id="tokensMinted">0</span></p>
-            <p>Total ETH Moved: <span id="ethMoved">0 ETH</span></p>
-          </div>
-          <div class="card dark compact-card">
-            <h3>🧩 Connected dApps</h3>
-            <ul id="connectedDapps" class="compact-list">
-              <li>-</li>
-            </ul>
-          </div>
-          <div class="card dark compact-card">
-            <h3>💰 Total Gas Fees (30D)</h3>
-            <p><span id="gasFees30d">$0.00</span></p>
-          </div>
-        </div>
-      </section>
-
-      <section class="tab-content home" data-tab="home" style="display: none;">
-        <h2 class="section-title-compact">👤 Mesh Profile</h2>
-        <div class="card-grid home-grid-compact">
-            <div class="card dark compact-card full-row grid-3-col">
-                <div>
-                    <h3 class="stat-label">XP STREAK</h3>
-                    <p class="stat-value" id="xpStreakHome">1575</p>
-                    <small>Daily tasks completed</small>
-                </div>
-                <div>
-                    <h3 class="stat-label">SPAWN BALANCE</h3>
-                    <p class="stat-value" id="spawnBalanceHome">497</p>
-                    <small>Test rewards from packs & quests</small>
-                </div>
-                <div>
-                    <h3 class="stat-label">TODAY'S EVENTS</h3>
-                    <p class="stat-value">9</p>
-                    <small>pack_open · swaps · casts</small>
-                </div>
-            </div>
-            
-            <div class="card dark compact-card full-row">
-                <h3 class="stat-label">LINKED APPS</h3>
-                <p class="text-xs">Base wallet <span class="badge required">REQUIRED</span></p>
-            </div>
-            <div class="card dark compact-card full-row">
-                <h3 class="stat-label">SOCIAL SURFACES</h3>
-                <p class="text-xs">Farcaster & Zora <span class="badge planned">PLANNED</span></p>
-            </div>
-            
-            <div class="card dark compact-card full-row">
-                <h3 class="stat-label">TODAY'S LOOP</h3>
-                <ul class="quest-list">
-                    <li>Open a test pack <span class="quest-xp">+50 XP</span></li>
-                    <li>Connect wallet <span class="quest-xp">+100 XP</span></li>
-                    <li>Share your mesh stats <span class="quest-xp">+100 XP</span></li>
-                </ul>
-            </div>
-        </div>
-      </section>
+      /* Neural Mesh Background Animation */
+      .neural-bg {
+        position: fixed;
+        top: 0; left: 0; width: 100vw; height: 100vh;
+        z-index: -1;
+        background: radial-gradient(circle at 50% 50%, #10151c 0%, #000000 100%);
+        overflow: hidden;
+      }
       
-      <section class="tab-content rewards" data-tab="rewards" style="display: none;">...</section>
-      <section class="tab-content premium" data-tab="premium" style="display: none;">...</section>
-      <section class="tab-content profile" data-tab="profile" style="display: none;">
-          <div class="profile-header-compact">
-            <div class="profile-info-compact">
-              <div class="profile-avatar">S</div>
-              <div>
-                <p class="profile-name">@spawniz</p>
-                <p class="profile-meta">Mesh ID · Creator</p>
-              </div>
-            </div>
-            <div class="profile-status">
-                <span class="status-dot"></span>
-                <span class="mesh-pro-tag">Mesh v1.0 PRO</span>
-                <button class="settings-icon-compact">⚙️</button>
-            </div>
-          </div>
-          <h2 class="section-title-large">Settings & API</h2>
-          
-          <div class="card-grid">
-            <div class="card dark full compact-card profile-pillar">
-              <h3>XP SDK & Integration (Pillar 1)</h3>
-              <p>Manage API keys to integrate SpawnEngine XP into your own apps.</p>
-              <button class="green-button-compact">Show API Key</button>
-            </div>
-            <div class="card dark full compact-card profile-pillar">
-              <h3>Premium Mesh Filters (Pillar 4)</h3>
-              <p>Unlock Alpha Hunters and Whale Tracking. Requires 500 SPN staking.</p>
-              <button class="blue-button-compact">Upgrade to Premium</button>
-            </div>
-            <div class="card dark full compact-card profile-pillar">
-              <h3>Launchpad Builder (Pillar 8)</h3>
-              <p>Access the Zero-Code Token/NFT Builder and Bonding Curve configuration.</p>
-              <button class="purple-button-compact">Open Creator Panel</button>
-            </div>
-             <div class="card dark full compact-card text-center">
-              <button class="gray-button-compact">Manage Notifications</button>
-            </div>
-          </div>
-      </section>
+      /* De tre animerade orberna - HÅRDKODADE FÄRGER för att matcha */
+      .orb {
+        position: absolute;
+        border-radius: 50%;
+        filter: blur(80px); 
+        opacity: 0.4;
+        animation: float 10s infinite ease-in-out;
+      }
+      .orb-1 { width: 300px; height: 300px; background: #00d0ff; top: -10%; left: -10%; animation-delay: 0s; } /* Neon Blå */
+      .orb-2 { width: 400px; height: 400px; background: #4affb4; bottom: -10%; right: -10%; animation-delay: -2s; } /* Grön Accent */
+      .orb-3 { width: 200px; height: 200px; background: #00d0ff; top: 40%; left: 40%; animation-delay: -4s; opacity: 0.2; }
+
+      /* Grid Overlay */
+      .grid-overlay {
+        position: absolute;
+        inset: 0;
+        background-image: 
+          linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+        background-size: 40px 40px;
+        mask-image: radial-gradient(circle at center, black 40%, transparent 100%);
+      }
+
+      /* Neon Text Glow */
+      .text-glow { text-shadow: 0 0 10px rgba(0, 208, 255, 0.5); } 
+
+      /* Custom animation for sheets */
+      .animate-float-up {
+        animation: float-up 0.3s ease-out forwards;
+      }
       
-      <div id="qrModal" class="modal hidden">...</div>
-      </main>
-  </div>
-  <script src="https://cdn.jsdelivr.net/npm/ethers@5.7.2/dist/ethers.umd.min.js"></script>
-  <script src="https://unpkg.com/@walletconnect/web3modal@2.6.4/dist/index.umd.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.0/build/qrcode.min.js"></script>
-  <script src="app.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/@walletconnect/web3-provider@1.8.0/dist/umd/index.min.js"></script>
-</body>
+      @keyframes float-up {
+        from { transform: translateY(100%); opacity: 0; }
+        to { transform: translateY(0); opacity: 1; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
 </html>
