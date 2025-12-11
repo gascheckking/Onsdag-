@@ -1,14 +1,15 @@
-// src/App.tsx - KOMPLETT KOD FÖR ALLA FLIKAR
-import React, { useState } from 'react';
-import './styles.css'; // Används för grundläggande återställningar
+// src/App.tsx - EXAKT MATCHNING AV DINA BILDER OCH ALLA FUNKTIONER
 
-// --- ICON IMPORTS (Dessa är nu installerade, bra!) ---
+import React, { useState } from 'react';
+import './styles.css'; // Används endast för grundläggande återställningar (MÅSTE VARA NÄSTAN TOM)
+
+// --- ICON IMPORTS (Lucide React) ---
 import { 
     Home, Box, User, Coins, TrendingUp, Users, Package, History, Settings, Award, 
-    Target, Brain, ChevronsRight, CheckCircle, Cpu, Wifi, Zap, Award as Trophy
+    Target, Brain, ChevronsRight, CheckCircle, Cpu, Zap, Award as Trophy 
 } from 'lucide-react';
 
-// --- STYLED COMPONENTS (Återanvändbara UI-element) ---
+// --- STYLED COMPONENTS (UI-element) ---
 
 /** HoloCard: Använder Tailwind-klasser och den anpassade mesh-neon färgen från index.html */
 const HoloCard = ({ children, className = '' }) => (
@@ -56,7 +57,6 @@ const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => {
                 <span className="text-gray-400">Free Spins: <span className="text-purple-400">{freeSpins}</span></span>
             </div>
             
-            {/* Reels Area - Håller samma storlek som dina kort för en enhetlig layout */}
             <div className="bg-gray-900/70 h-28 rounded-lg flex items-center justify-center mb-4 border border-white/5">
                 <span className="text-4xl text-gray-700 font-bold">SPIN</span>
             </div>
@@ -130,7 +130,7 @@ const HomeView = ({ seTokens, currentXP }) => (
     <div className="space-y-5 animate-fade-in">
         <PlatformHeader title="SpawnEngine" icon={Home} />
         
-        {/* Kontokort: Matchar layouten från din första skärmdump (Mesh Profile) */}
+        {/* Kontokort: Matchar layouten från din första skärmdump (Grid) */}
         <HoloCard className="p-5 bg-blue-900/20 border-blue-500/50 shadow-[0_0_15px_rgba(59,130,246,0.3)] grid grid-cols-2 gap-4">
             <div>
                 <p className="text-xs text-gray-400">XP Streak</p>
@@ -172,7 +172,7 @@ const HomeView = ({ seTokens, currentXP }) => (
 );
 
 
-// --- B. LOOT VIEW (Packs, Slot, History) ---
+// --- B. LOOT VIEW ---
 const PacksView = ({ openPack }) => (
     <div className="space-y-4">
         <h3 className="text-sm font-bold text-gray-300 flex items-center gap-2">
@@ -363,7 +363,7 @@ const BrainView = () => (
 // --- E. PROFILE VIEW (Settings & API) ---
 const ProfileView = () => (
     <div className="space-y-5 animate-fade-in">
-        {/* Profile Header (Matchar exakt layouten från den andra bilden) */}
+        {/* Profile Header (Matchar exakt layouten från bilden) */}
         <div className="flex items-center gap-3 pt-2 mb-6">
             <div className="w-10 h-10 bg-purple-500 rounded-full flex items-center justify-center text-white font-bold text-xl">S</div>
             <div>
@@ -420,7 +420,7 @@ const ProfileView = () => (
 // --- MAIN APP COMPONENT ---
 
 const App: React.FC = () => {
-    // Initial State (använder mock-värden från dina skärmdumpar)
+    // Initial State
     const [activeTab, setActiveTab] = useState<'home' | 'loot' | 'market' | 'brain' | 'profile'>('home');
     const [activeLootSubTab, setActiveLootSubTab] = useState<'packs' | 'slot' | 'history'>('packs');
     const [activeMarketSubTab, setActiveMarketSubTab] = useState<'trending' | 'creators' | 'zora'>('trending');
@@ -516,9 +516,10 @@ const App: React.FC = () => {
     };
 
     return (
-        // Använder flex för att centrera innehållet och pusha navbaren till botten
+        // Wrapper som säkerställer att appen är centrerad och har rätt mobil bredd
         <div className="min-h-screen bg-black text-white font-sans flex flex-col items-center">
-            {/* Neural Mesh Background Animation (Från index.html) */}
+            
+            {/* Neural Mesh Background Animation (Kopierad från din index.html för att garantera att den syns) */}
             <div className="neural-bg">
                 <div className="orb orb-1"></div>
                 <div className="orb orb-2"></div>
@@ -526,12 +527,12 @@ const App: React.FC = () => {
                 <div className="grid-overlay"></div>
             </div>
 
+            {/* Innehållet MÅSTE vara ovanför bakgrunden (z-10) och centrerat (max-w-md) */}
             <div className="w-full max-w-md p-4 pb-20 relative z-10">
-                {/* Dynamiskt innehåll baserat på vald flik */}
                 {renderContent()}
             </div>
             
-            {/* Bottom Navigation Bar */}
+            {/* Bottom Navigation Bar (Fast längst ner, centrerad) */}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-gray-900/90 backdrop-blur-md border-t border-white/10 p-2 flex justify-around z-50">
                 {[
                     { id: 'home', icon: Home, label: 'Home' },
