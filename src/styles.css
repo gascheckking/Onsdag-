@@ -1,89 +1,11 @@
-/* src/styles.css - Global CSS för SpawnEngine Neon Blue Design */
+/* src/styles.css */
 
+/* De tre obligatoriska Tailwind-direktiven */
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* 1. GRUNDÅTERSTÄLLNING OCH FÄRGER */
-:root {
-  /* Neon Blå */
-  --color-primary: #00d0ff; 
-  /* Grön XP/Success */
-  --color-success: #4affb4; 
-  /* Mörkaste bakgrund */
-  --color-bg-dark: #0c0f14;
-  /* Kort/Panel Bakgrund */
-  --color-card-bg: #181d24;
-  /* Mörk Gråblå Border */
-  --color-border: #28303f; 
-}
-
-body {
-  margin: 0;
-  font-family: 'Arial', sans-serif;
-  background-color: var(--color-bg-dark);
-  color: #e0e6ff;
-  transition: background-color 0.3s ease;
-  min-height: 100vh;
-}
-
-/* 2. KOMPAKTA KLASSER FÖR ÅTERANVÄNDNING */
-
-.app-wrapper {
-  /* Begränsa appen till mobil bredd och centrera */
-  max-width: 450px; 
-  margin: 0 auto;
-  padding: 10px 0;
-}
-
-/* Header/Navigering */
-.compact-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 0.5rem 0.8rem;
-  background-color: #12151a; 
-  border-bottom: 1px solid var(--color-border);
-}
-
-.compact-nav {
-  display: flex;
-  justify-content: space-around;
-  padding: 0.3rem 0.5rem;
-  background-color: #12151a;
-  border-top: 1px solid var(--color-border);
-  border-bottom: 1px solid var(--color-border);
-}
-
-.tab-button {
-  @apply text-gray-400 font-bold text-xs p-2 transition-colors duration-200;
-}
-
-.tab-button.active {
-  color: var(--color-primary);
-  text-decoration: underline;
-  text-underline-offset: 4px;
-  text-decoration-thickness: 2px;
-}
-
-/* Kort Stil (HoloCard-ersättning) */
-.compact-card {
-  background-color: var(--color-card-bg); 
-  padding: 0.8rem;
-  border-radius: 8px;
-  border: 1px solid var(--color-border); 
-  transition: border-color 0.3s ease, box-shadow 0.3s ease;
-}
-
-.compact-card:hover {
-  border-color: var(--color-primary);
-  box-shadow: 0 0 8px rgba(0, 208, 255, 0.3);
-}
-
-/* Rubrikstil */
-.section-title {
-    font-size: 1.2rem;
-    margin: 1rem 0 0.5rem;
-    color: var(--color-primary);
-    font-weight: bold;
+/* Eventuell global CSS kan läggas till här */
+* {
+    box-sizing: border-box;
 }
