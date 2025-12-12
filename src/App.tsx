@@ -1,22 +1,22 @@
-// src/App.tsx - Kompakt SpawnEngine Layout & Funktionalitet
+// src/App.tsx - EXAKT REPLIKATION AV DIN ÖNSKADE DESIGN FÖR HOME VIEW
 
 import React, { useState } from 'react';
 import './styles.css'; 
 import { 
     Home, Box, User, Coins, TrendingUp, Users, Package, History, Settings, Award, 
-    Target, Brain, ChevronsRight, CheckCircle, Cpu, Zap, Award as Trophy 
+    Target, Brain, ChevronsRight, CheckCircle, Cpu, Zap, Award as Trophy, Link, Map, Code, Activity
 } from 'lucide-react';
 
-// --- STYLED COMPONENTS (Nu Mycket Mer Kompakt) ---
+// --- STYLED COMPONENTS (Använder de globala färgerna) ---
 
 /** CompactCard: Använder nu de nya färgvariablerna från tailwind.config.js */
 const CompactCard: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className = '' }) => (
-    <div className={`p-3 bg-spawn-card border border-spawn-border rounded-lg transition-all duration-300 ${className}`}>
+    <div className={`p-4 bg-spawn-card border border-spawn-border rounded-xl transition-all duration-300 ${className}`}>
         {children}
     </div>
 );
 
-/** SectionTitle: För alla flikar */
+/** SectionTitle: Används för rubriker i andra vyer */
 const SectionTitle: React.FC<{ title: string; icon: React.ElementType }> = ({ title, icon: Icon }) => (
     <div className="flex items-center gap-2 mt-4 mb-2">
         <Icon size={20} className="text-spawn-success" />
@@ -26,7 +26,6 @@ const SectionTitle: React.FC<{ title: string; icon: React.ElementType }> = ({ ti
 
 /** SubNav: För Loot och Market */
 const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
-    // Gör SubNav mer kompakt och använder nya färger
     <div className="flex bg-spawn-card p-1 rounded-md border border-spawn-border mb-3 text-xs">
         {subTabs.map(tab => (
             <button
@@ -44,73 +43,118 @@ const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
     </div>
 );
 
-// --- 1. HOME VIEW (Mesh Profile - MEST KOMPRIMERAD) ---
+
+// --- 1. HOME VIEW (MATCHAR SKÄRMDUMPEN EXAKT) ---
 const HomeView = ({ seTokens, currentXP }) => (
-    <div className="space-y-3 animate-fade-in">
-        
-        {/* Mesh Profile Card (Matchar den kompakta bildens layout) */}
-        <CompactCard className="grid grid-cols-3 gap-2 p-2 bg-[#12151a] border-spawn-primary/50 shadow-[0_0_8px_rgba(0,208,255,0.1)]">
-            <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-bold leading-none">XP STREAK</p>
-                <p className="text-lg font-extrabold text-spawn-success leading-tight mt-1">{currentXP}</p>
+    <div className="space-y-4 animate-fade-in">
+
+        {/* Top Header/Status Bar (Replikation av skärmdumpens utseende) */}
+        <div className="grid grid-cols-5 gap-2 text-[10px] items-center text-center font-mono">
+            <div className="col-span-2 text-left text-gray-400">
+                WALLET <span className="text-red-400 block leading-none">Disconnected</span>
             </div>
-            <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-bold leading-none">SPAWN BALANCE</p>
-                <p className="text-lg font-extrabold text-white leading-tight mt-1">{seTokens}</p>
+            <div className="col-span-1 text-gray-400 leading-none">
+                GAS <span className="text-spawn-success block leading-none">-0.25 gwei est.</span>
             </div>
-            <div className="text-center">
-                <p className="text-[10px] text-gray-500 font-bold leading-none">TODAY'S EVENTS</p>
-                <p className="text-lg font-extrabold text-white leading-tight mt-1">9</p>
+            <div className="col-span-2 text-right text-gray-400">
+                <span className="text-white block leading-none">9 events</span>
+                <span className="text-gray-500 block leading-none">v0.2 - mock</span>
+            </div>
+        </div>
+
+        {/* Mesh Profile Card */}
+        <CompactCard className="space-y-4 pt-3 pb-3 bg-spawn-card/70 border-spawn-primary/20">
+            <h2 className="text-xl font-black text-white flex items-center gap-2">
+                <Activity size={20} className="text-spawn-primary" /> MESH PROFILE
+            </h2>
+            <div className="flex justify-between items-center pb-2 border-b border-spawn-border">
+                <div className="flex items-center gap-2">
+                    <span className="text-sm font-bold text-spawn-success">@spawnengine</span>
+                    <span className="text-[10px] text-gray-500 border border-gray-600 px-2 py-0.5 rounded-full">ONLINE</span>
+                </div>
+                <div className="text-xs text-right text-gray-400">
+                    One wallet, multiple contract types.
+                </div>
+            </div>
+
+            {/* Stats Block (XP, Balance, Events) */}
+            <div className="grid grid-cols-3 gap-2 text-sm text-center">
+                <div className="p-2 border border-spawn-border rounded-lg bg-black/20">
+                    <p className="font-extrabold text-white text-lg leading-none">{currentXP}</p>
+                    <p className="text-[10px] text-gray-500 mt-1">XP STREAK</p>
+                </div>
+                <div className="p-2 border border-spawn-border rounded-lg bg-black/20">
+                    <p className="font-extrabold text-white text-lg leading-none">{seTokens}</p>
+                    <p className="text-[10px] text-gray-500 mt-1">SPAWN BALANCE</p>
+                </div>
+                <div className="p-2 border border-spawn-border rounded-lg bg-black/20">
+                    <p className="font-extrabold text-white text-lg leading-none">9</p>
+                    <p className="text-[10px] text-gray-500 mt-1">TODAY'S EVENTS</p>
+                </div>
             </div>
         </CompactCard>
 
-        <SectionTitle title="Spawn Tracker" icon={TrendingUp} />
-
-        {/* Tracker Stats (Mycket kompakt) */}
-        <div className="grid grid-cols-3 gap-2 text-xs">
-            <CompactCard className="col-span-1 p-2">
-                <h3 className="text-xs text-center text-spawn-primary">⛽ Gas</h3>
-                <p className="text-center font-bold text-white leading-tight mt-1">3.45 Gwei</p>
-            </CompactCard>
-            <CompactCard className="col-span-1 p-2">
-                <h3 className="text-xs text-center text-spawn-primary">📊 PnL</h3>
-                <p className="text-center font-bold text-white leading-tight mt-1">+ $1.25</p>
-            </CompactCard>
-            <CompactCard className="col-span-1 p-2">
-                <h3 className="text-xs text-center text-spawn-primary">📦 Mints</h3>
-                <p className="text-center font-bold text-white leading-tight mt-1">45</p>
-            </CompactCard>
-        </div>
-        
-        {/* Latest Activity Log (Kompakt) */}
-        <CompactCard className="col-span-3 p-3">
-            <h3 className="text-sm text-spawn-primary">📜 Latest Activity Log</h3>
-            <p className="font-mono mt-1 text-white text-xs">
-                ↪ 0x123...456 — 0.001 ETH
+        {/* Linked Apps Section */}
+        <CompactCard className="space-y-3 bg-spawn-card/70 border-spawn-primary/20">
+            <h3 className="text-sm font-black text-spawn-primary flex items-center gap-2">
+                <Link size={16} /> LINKED APPS
+            </h3>
+            <div className="flex justify-between items-center p-2 border border-spawn-border rounded-lg bg-black/20">
+                <div className="text-sm text-white">Base Wallet</div>
+                <span className="text-xs font-bold text-red-400 border border-red-400 px-2 py-0.5 rounded-full">REQUIRED</span>
+            </div>
+            <p className="text-xs text-gray-500">
+                Your first wallet to lock in your mesh identity.
             </p>
-            <small className="text-spawn-success font-bold block text-right text-[10px]">$3.50 Profit</small>
         </CompactCard>
-        
-        <SectionTitle title="Today's Loop" icon={Target} />
-        <div className="space-y-2">
-            {[
-                { title: "Connect Wallet", progress: 1, max: 1, reward: "+100 XP" },
-                { title: "Open a Pack", progress: 0, max: 1, reward: "+50 XP" },
-            ].map((quest, i) => (
-                <CompactCard key={i} className="flex justify-between items-center border-spawn-border hover:border-spawn-primary/50 p-2">
-                    <div>
-                        <p className="text-sm font-bold text-white">{quest.title}</p>
+
+        {/* Social Surfaces Section */}
+        <CompactCard className="space-y-3 bg-spawn-card/70 border-spawn-primary/20">
+            <h3 className="text-sm font-black text-spawn-primary flex items-center gap-2">
+                <Code size={16} /> SOCIAL SURFACES
+            </h3>
+            <div className="flex justify-between items-center p-2 border border-spawn-border rounded-lg bg-black/20">
+                <div className="text-sm text-white">Farcaster & Zora</div>
+                <span className="text-xs font-bold text-yellow-400 border border-yellow-400 px-2 py-0.5 rounded-full">PLANNED</span>
+            </div>
+            <p className="text-xs text-gray-500">
+                Your casts and creator actions will become first-class events.
+            </p>
+        </CompactCard>
+
+        {/* Today's Loop */}
+        <CompactCard className="space-y-3 bg-spawn-card/70 border-spawn-primary/20">
+            <h3 className="text-sm font-black text-spawn-primary flex justify-between items-center">
+                Today's loop 
+                <span className="text-xs font-bold text-spawn-success">+250 XP available</span>
+            </h3>
+            
+            <div className="space-y-2">
+                {[
+                    { title: "Open a test pack", progress: true, reward: "+50 XP" },
+                    { title: "Connect wallet", progress: true, reward: "+100 XP" },
+                    { title: "Share your mesh", progress: false, reward: "+100 XP" },
+                ].map((quest, i) => (
+                    <div key={i} className="flex justify-between items-center p-2 border-b border-spawn-border/50">
+                        <div className="flex items-center gap-2">
+                            <input 
+                                type="checkbox" 
+                                checked={quest.progress} 
+                                readOnly 
+                                className={`h-4 w-4 rounded border-spawn-border cursor-pointer ${quest.progress ? 'bg-spawn-success' : 'bg-gray-700'}`}
+                            />
+                            <p className={`text-sm font-bold ${quest.progress ? 'text-gray-500 line-through' : 'text-white'}`}>{quest.title}</p>
+                        </div>
+                        <p className={`text-sm font-bold ${quest.progress ? 'text-gray-600' : 'text-spawn-success'}`}>{quest.reward}</p>
                     </div>
-                    <div className="text-right">
-                        <p className="text-sm font-bold text-spawn-success">{quest.reward}</p>
-                    </div>
-                </CompactCard>
-            ))}
-        </div>
+                ))}
+            </div>
+        </CompactCard>
     </div>
 );
 
 
+// --- ÖVRIGA VIEWS (Behålls i den kompakta stilen) ---
 // Slot View anpassas
 const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => {
     return (
@@ -517,18 +561,37 @@ const App: React.FC = () => {
                 <div className="grid-overlay"></div>
             </div>
             
-            {/* Huvud Header (Sticky Top) */}
+            {/* Huvud Header (Fast överst som i skärmdumpen) */}
             <header className="sticky top-0 z-50 w-full max-w-md bg-spawn-bg/90 backdrop-blur-sm border-b border-spawn-border">
                 <div className="flex justify-between items-center p-3">
-                    <h1 className="text-xl font-bold text-spawn-primary">SPAWNENGINE</h1>
-                    <div className="flex items-center gap-3">
-                        <span className="text-xs font-bold text-spawn-success bg-[#0d2c20] p-1 rounded">
-                            {currentXP} XP 🔥
-                        </span>
-                        <button className="text-xs font-bold text-black bg-spawn-primary px-3 py-1 rounded hover:bg-white/90">
-                            Connect
-                        </button>
+                    <div className="flex items-center gap-2">
+                        <div className="w-6 h-6 bg-spawn-primary rounded-full flex items-center justify-center text-xs font-bold text-black">SE</div>
+                        <div>
+                            <h1 className="text-xs font-bold text-white leading-none">SPAWNENGINE</h1>
+                            <p className="text-[10px] text-gray-500 leading-none">Modular onchain engine for packs, XP, badges & creator modules</p>
+                        </div>
                     </div>
+                    
+                    <button className="text-xs font-bold text-black bg-spawn-primary px-3 py-1 rounded-full hover:bg-white/90 flex items-center gap-1">
+                        <Map size={12} /> Connect
+                    </button>
+                </div>
+                
+                {/* Sub-Navigation (Under headern, matchar skärmdumpen) */}
+                <div className="flex justify-around text-xs p-2 border-t border-spawn-border">
+                    {['Profile', 'Overview', 'Trading', 'Pull Lab', 'Pack Maps'].map((label, index) => (
+                        <button
+                            key={label}
+                            className={`px-3 py-1 rounded-full transition-colors duration-200 ${
+                                index === 0 
+                                    ? 'bg-spawn-primary text-black font-bold' 
+                                    : 'text-gray-400 hover:text-white'
+                            }`}
+                            // I en riktig app skulle detta vara en funktionell knapp
+                        >
+                            {label}
+                        </button>
+                    ))}
                 </div>
             </header>
 
@@ -538,7 +601,7 @@ const App: React.FC = () => {
                 {renderContent()}
             </div>
             
-            {/* Bottom Navigation Bar (Fast längst nere) */}
+            {/* Bottom Navigation Bar (Fast längst nere) - Matchar din skärmdump */}
             <div className="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-gray-900/90 backdrop-blur-md border-t border-spawn-border p-2 flex justify-around z-50">
                 {[
                     { id: 'home', icon: Home, label: 'Home' },
