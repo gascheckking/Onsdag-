@@ -1,5 +1,133 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Home, Compass, Box, ShoppingCart, Cpu, Settings, User, Zap, Activity, Link, MessageCircle } from 'lucide-react';
+
+// Kontrollera att THREE.js är tillgängligt, annars logga ett fel.
+if (typeof THREE === 'undefined') {
+  console.warn("THREE.js är inte laddat. MeshBackground kommer inte att synas.");
+}
+
+// --- MeshBackground Component ---
+// Denna komponent skapar en 3D-mesh av punkter som subtilt roterar 
+// och blinkar slumpmässigt för att simulera "onchain activity" i bakgrunden.
+const MeshBackground = () => {
+  const mountRef = useRef(null);
+
+  useEffect(() => {
+    if (typeof THREE === 'undefined' || !mountRef.current) return;
+
+    // 1. Setup
+    const currentMount = mountRef.current;
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(75, currentMount.clientWidth / currentMount.clientHeight, 0.1, 1000);
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    
+    renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+    renderer.setClearColor(0x000000, 0); // Transparent bakgrund
+    currentMount.appendChild(renderer.domElement);
+    
+    // 2. Mesh Generation
+    const particlesCount = 500;
+    const geometry = new THREE.BufferGeometry();
+    const positions = [];
+    const colors = [];
+    const color = new THREE.Color();
+    const range = 50; 
+    
+    for (let i = 0; i < particlesCount; i++) {
+      // Slumpmässig position i 3D-rymden
+      positions.push((Math.random() - 0.5) * range);
+      positions.push((Math.random() - 0.5) * range);
+      positions.push((Math.random() - 0.5) * range);
+
+      // Initial färg (Subtil indigo/blå nyans, låg ljusstyrka)
+      color.setHSL(0.6, 0.5, 0.4 + Math.random() * 0.2); 
+      colors.push(color.r, color.g, color.b);
+    }
+
+    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.Float32BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({ 
+      size: 0.2, 
+      vertexColors: true, 
+      sizeAttenuation: true 
+    });
+
+    const mesh = new THREE.Points(geometry, material);
+    scene.add(mesh);
+    camera.position.z = 30; 
+
+    // 3. Animation Loop & Activity Simulation
+    let frame = 0;
+    let animationId;
+
+    const animate = () => {
+      frame++;
+      animationId = requestAnimationFrame(animate);
+
+      // Subtil rotation
+      mesh.rotation.y += 0.0005;
+      mesh.rotation.x += 0.0001;
+
+      const colorsArray = geometry.attributes.color.array;
+      
+      // Fada ut blinkande noder mot basfärgen
+      for (let i = 0; i < particlesCount; i++) {
+        const i3 = i * 3;
+        // Ljusstyrka (index 2) fadar mot 0.4 (basfärg)
+        colorsArray[i3 + 2] = colorsArray[i3 + 2] * 0.98 + (0.4 * 0.02); 
+      }
+      
+      // Slumpmässigt blinka 1-3 noder var 50:e frame (simulerar aktivitet)
+      if (frame % 50 === 0) {
+        for (let j = 0; j < Math.floor(Math.random() * 3) + 1; j++) {
+          const index = Math.floor(Math.random() * particlesCount);
+          const i3 = index * 3;
+          
+          // Öka ljusstyrkan till nästan vit (1.0) för att blinka
+          colorsArray[i3 + 2] = 1.0; 
+        }
+      }
+
+      geometry.attributes.color.needsUpdate = true;
+      renderer.render(scene, camera);
+    };
+
+    animate();
+
+    // 4. Handle Resize
+    const handleResize = () => {
+      if (currentMount) {
+        camera.aspect = currentMount.clientWidth / currentMount.clientHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(currentMount.clientWidth, currentMount.clientHeight);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    // 5. Cleanup
+    return () => {
+      cancelAnimationFrame(animationId);
+      window.removeEventListener('resize', handleResize);
+      if (currentMount && renderer.domElement) {
+        currentMount.removeChild(renderer.domElement);
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      ref={mountRef} 
+      // Positionerar den absolut i bakgrunden med låg opacitet
+      className="absolute inset-0 z-0 opacity-20 pointer-events-none"
+    >
+      {/* Three.js canvas kommer att injiceras här */}
+    </div>
+  );
+};
+// --- End of MeshBackground Component ---
+
 
 // Denna komponent implementerar hela SpawnEngine Dashboard UI med Tailwind CSS,
 // baserat på den visade designen (exempel.png).
@@ -34,13 +162,13 @@ const App = () => {
 
   // Huvudstatistikkort för snabb översikt
   const StatCard = ({ title, value, unit, icon: Icon }) => (
-    <div className="p-4 bg-gray-800/50 rounded-xl border border-gray-700/50 flex flex-col justify-between">
-      <div className="text-xs text-gray-400 uppercase font-semibold tracking-wider mb-2">{title}</div>
-      <div className="text-2xl font-bold text-white leading-none">
+    <div className="relative p-4 bg-gray-800/50 rounded-xl border border-gray-700/50 flex flex-col justify-between overflow-hidden">
+      <div className="text-xs text-gray-400 uppercase font-semibold tracking-wider mb-2 z-10">{title}</div>
+      <div className="text-2xl font-bold text-white leading-none z-10">
         {value}
         {unit && <span className="text-base font-normal text-gray-400 ml-1">{unit}</span>}
       </div>
-      {Icon && <Icon className="w-5 h-5 text-indigo-400 absolute top-4 right-4 opacity-30" />}
+      {Icon && <Icon className="w-5 h-5 text-indigo-400 absolute top-4 right-4 opacity-30 z-0" />}
     </div>
   );
 
@@ -96,10 +224,14 @@ const App = () => {
   // --- Huvudlayout ---
 
   return (
-    <div className="min-h-screen bg-gray-900 text-white font-sans flex flex-col lg:flex-row">
+    <div className="min-h-screen bg-gray-900 text-white font-sans flex flex-col lg:flex-row relative overflow-hidden">
+      
+      {/* 0. Mesh Bakgrund (Z-index 0) */}
+      <MeshBackground />
       
       {/* 1. Desktop Sidomeny (Hidden on Mobile) */}
-      <div className="hidden lg:flex lg:w-64 flex-col bg-gray-900 border-r border-gray-800 p-4 fixed h-full">
+      {/* Z-index 10 behövs för att menyn ska vara över den dolda mesh-bakgrunden */}
+      <div className="hidden lg:flex lg:w-64 flex-col bg-gray-900 border-r border-gray-800 p-4 fixed h-full z-10">
         {/* Logotyp och profil-toggle */}
         <div className="flex items-center p-2 mb-8">
           <div className="w-8 h-8 bg-indigo-600 rounded-full flex items-center justify-center font-bold text-sm mr-3">SE</div>
@@ -121,7 +253,8 @@ const App = () => {
       </div>
 
       {/* 2. Huvudinnehåll */}
-      <main className="flex-1 pb-20 lg:pb-4 lg:ml-64 p-4 lg:p-8">
+      {/* Relative z-10 ser till att UI-innehållet ligger över mesh-bakgrunden */}
+      <main className="flex-1 pb-20 lg:pb-4 lg:ml-64 p-4 lg:p-8 relative z-10">
         
         {/* Toppremsa (Header) */}
         <header className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 border-b border-gray-800 pb-4">
