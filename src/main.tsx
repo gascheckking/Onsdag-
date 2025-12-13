@@ -1,12 +1,21 @@
-// src/main.tsx
-
 import React from 'react';
-import ReactDOM from 'react-dom/client';
-import App from './App.tsx';
-import './styles.css';
 
-ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
+import ReactDOM from 'react-dom/client';
+
+// Importera den nya huvudkomponenten
+
+import ProjectDashboard from './ProjectDashboard.jsx';
+
+import './index.css'; // Antar att Tailwind CSS importeras här
+
+
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+
   <React.StrictMode>
-    <App />
-  </React.StrictMode>
+
+    <ProjectDashboard />
+
+  </React.StrictMode>,
+
 );
