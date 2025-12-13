@@ -7,11 +7,14 @@ import {
 // --- STYLES & TAILWIND CONFIG INTEGRATION ---
 const styles = `
     /* Custom Tailwind Colors based on the dark, neon aesthetic */
-    .spawn-bg { background-color: #0d1117; } /* Deep Dark Background */
-    .spawn-card { background-color: #161b22; } /* Card background */
-    .spawn-border { border-color: #30363d; } /* Subtle Borders */
-    .spawn-primary { color: #58a6ff; background-color: #58a6ff; } /* Blue Primary (Buttons, Highlights) */
-    .spawn-success { color: #3fb950; background-color: #3fb950; } /* Green Success */
+    /* UPDATED TO MATCH tailwind.config.js: */
+    .spawn-bg { background-color: #0c0f14; } /* Deep Dark Background */
+    .spawn-card { background-color: #181d24; } /* Card background */
+    .spawn-border { border-color: #28303f; } /* Subtle Borders */
+    .spawn-primary-color { color: #00d0ff; } /* Blue Primary (Text) */
+    .spawn-primary-bg { background-color: #00d0ff; } /* Blue Primary (Background) */
+    .spawn-success-color { color: #4affb4; } /* Green Success (Text) */
+    .spawn-success-bg { background-color: #4affb4; } /* Green Success (Background) */
     
     /* Background Animation (Neural Mesh) - Integrated from styles.css */
     .neural-bg {
@@ -44,10 +47,11 @@ const styles = `
         animation: pulse 15s infinite alternate;
     }
 
+    /* Orb colors updated to match the new scheme (spawn-primary & spawn-success) and added a third orb color */
     .orb-1 {
         width: 300px;
         height: 300px;
-        background-color: #58a6ff; /* Primary Blue */
+        background-color: #00d0ff; /* Primary Blue */
         top: 10%;
         left: 15%;
         animation-duration: 18s;
@@ -55,7 +59,7 @@ const styles = `
     .orb-2 {
         width: 400px;
         height: 400px;
-        background-color: #3fb950; /* Success Green */
+        background-color: #4affb4; /* Success Green */
         bottom: 5%;
         right: 10%;
         animation-duration: 20s;
@@ -63,7 +67,7 @@ const styles = `
     .orb-3 {
         width: 250px;
         height: 250px;
-        background-color: #ff007f; /* Neon Pink/Red */
+        background-color: #ff007f; /* Neon Pink/Red (kept for visual contrast) */
         top: 50%;
         left: 50%;
         transform: translate(-50%, -50%);
@@ -76,7 +80,7 @@ const styles = `
     }
     
     /* Utility for Card background colors to match screenshot */
-    .bg-spawn-card-trans { background-color: rgba(22, 27, 34, 0.7); }
+    .bg-spawn-card-trans { background-color: rgba(24, 29, 36, 0.7); } /* Updated R G B values to match #181d24 */
 `;
 
 // --- HELPER COMPONENTS ---
@@ -87,13 +91,15 @@ const CompactCard: React.FC<{ children: React.ReactNode; className?: string }> =
     </div>
 );
 
+// Updated: Replaced fixed Tailwind colors in title with the general spawn-success class
 const SectionTitle: React.FC<{ title: string; icon: React.ElementType }> = ({ title, icon: Icon }) => (
     <div className="flex items-center gap-2 mt-4 mb-2">
-        <Icon size={20} className="text-spawn-success" />
+        <Icon size={20} className="spawn-success-color" />
         <h2 className="text-xl font-black text-white">{title}</h2>
     </div>
 );
 
+// Updated: Replaced fixed Tailwind colors in subnav with the general spawn-primary class
 const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
     <div className="flex bg-spawn-card-trans p-1 rounded-lg border border-spawn-border mb-3 text-sm">
         {subTabs.map(tab => (
@@ -101,7 +107,7 @@ const SubNav = ({ subTabs, activeSubTab, setActiveSubTab }) => (
                 key={tab.id}
                 className={`flex-1 py-2 font-bold rounded-md transition-colors duration-200 ${
                     activeSubTab === tab.id 
-                        ? 'bg-spawn-primary text-black shadow-lg shadow-spawn-primary/20' 
+                        ? 'spawn-primary-bg text-black shadow-lg shadow-spawn-primary/20' 
                         : 'text-gray-400 hover:text-white'
                 }`}
                 onClick={() => setActiveSubTab(tab.id)}
@@ -125,7 +131,7 @@ const HomeView = ({ seTokens, currentXP }) => (
                     WALLET <span className="text-red-400 block leading-none">Disconnected</span>
                 </div>
                 <div className="text-gray-400 leading-none">
-                    GAS <span className="text-spawn-success block leading-none">-0.26 gwei est.</span>
+                    GAS <span className="spawn-success-color block leading-none">-0.26 gwei est.</span>
                 </div>
                 <div className="text-gray-400 leading-none">
                     MESH <span className="text-white block leading-none">9 events</span>
@@ -155,9 +161,10 @@ const HomeView = ({ seTokens, currentXP }) => (
         <div className="grid lg:grid-cols-2 xl:grid-cols-3 gap-6">
 
             {/* MESH PROFILE CARD (Matches image style) - Takes full width on small screens, 1/2 or 1/3 on desktop */}
+            {/* Updated border color */}
             <CompactCard className="space-y-4 pt-4 pb-4 bg-spawn-card-trans/90 border-spawn-primary/40 col-span-full xl:col-span-2">
                 <h2 className="text-xl font-black text-white flex items-center gap-2 pb-2 border-b border-spawn-border/50">
-                    <Activity size={20} className="text-spawn-primary" /> MESH PROFILE
+                    <Activity size={20} className="spawn-primary-color" /> MESH PROFILE
                 </h2>
                 
                 {/* Profile Header */}
@@ -165,10 +172,10 @@ const HomeView = ({ seTokens, currentXP }) => (
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-purple-500 rounded-full flex items-center justify-center text-sm font-bold text-white">SE</div>
                         <div>
-                            <span className="text-base font-bold text-spawn-success block">@spawnengine</span>
+                            <span className="text-base font-bold spawn-success-color block">@spawnengine</span>
                             <span className="text-xs text-gray-500">Mesh owner on Base · Layer-4 style XP & packs</span>
                         </div>
-                        <span className="text-[10px] text-spawn-success border border-spawn-success px-2 py-0.5 rounded-full font-mono">ONLINE</span>
+                        <span className="text-[10px] spawn-success-color border border-spawn-success px-2 py-0.5 rounded-full font-mono">ONLINE</span>
                     </div>
                     <div className="text-xs text-right text-gray-400">
                         One wallet, multiple contract types, all flowing into a single activity mesh.
@@ -197,9 +204,10 @@ const HomeView = ({ seTokens, currentXP }) => (
 
             {/* Today's Loop (Moved to the side for the desktop layout) */}
             <CompactCard className="space-y-4 bg-spawn-card-trans/90 border-spawn-primary/20 col-span-full xl:col-span-1">
-                <h3 className="text-sm font-black text-spawn-primary flex justify-between items-center border-b border-spawn-border/50 pb-2">
+                {/* Updated text color */}
+                <h3 className="text-sm font-black spawn-primary-color flex justify-between items-center border-b border-spawn-border/50 pb-2">
                     Today's loop 
-                    <span className="text-xs font-bold text-spawn-success">+250 XP available</span>
+                    <span className="text-xs font-bold spawn-success-color">+250 XP available</span>
                 </h3>
                 
                 <div className="space-y-2">
@@ -215,14 +223,14 @@ const HomeView = ({ seTokens, currentXP }) => (
                                     name="quest" 
                                     checked={i < 2} 
                                     readOnly 
-                                    className={`mt-1 h-4 w-4 rounded-full border-spawn-border cursor-pointer ${i < 2 ? 'bg-spawn-success text-spawn-success' : 'bg-gray-700'}`}
+                                    className={`mt-1 h-4 w-4 rounded-full border-spawn-border cursor-pointer ${i < 2 ? 'bg-spawn-success spawn-success-color' : 'bg-gray-700'}`}
                                 />
                                 <div>
                                     <p className={`text-sm font-bold ${i < 2 ? 'text-gray-500 line-through' : 'text-white'}`}>{quest.title}</p>
                                     <p className="text-[10px] text-gray-600 italic">{quest.sub}</p>
                                 </div>
                             </div>
-                            <p className="text-sm font-bold text-spawn-success flex-shrink-0">{quest.reward}</p>
+                            <p className="text-sm font-bold spawn-success-color flex-shrink-0">{quest.reward}</p>
                         </div>
                     ))}
                 </div>
@@ -230,7 +238,7 @@ const HomeView = ({ seTokens, currentXP }) => (
 
             {/* Linked Apps Section (Bottom left corner card) */}
             <CompactCard className="space-y-3 bg-spawn-card-trans/90 border-spawn-primary/20 xl:col-span-1">
-                <h3 className="text-sm font-black text-spawn-primary flex items-center gap-2 pb-1 border-b border-spawn-border/50">
+                <h3 className="text-sm font-black spawn-primary-color flex items-center gap-2 pb-1 border-b border-spawn-border/50">
                     <Link size={16} /> LINKED APPS
                 </h3>
                 <div className="flex justify-between items-center p-2 border border-spawn-border rounded-lg bg-black/20">
@@ -244,7 +252,7 @@ const HomeView = ({ seTokens, currentXP }) => (
 
             {/* Social Surfaces Section (Bottom right corner card) */}
             <CompactCard className="space-y-3 bg-spawn-card-trans/90 border-spawn-primary/20 xl:col-span-1">
-                <h3 className="text-sm font-black text-spawn-primary flex items-center gap-2 pb-1 border-b border-spawn-border/50">
+                <h3 className="text-sm font-black spawn-primary-color flex items-center gap-2 pb-1 border-b border-spawn-border/50">
                     <Code size={16} /> SOCIAL SURFACES
                 </h3>
                 <div className="flex justify-between items-center p-2 border border-spawn-border rounded-lg bg-black/20">
@@ -268,7 +276,7 @@ const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => (
             <Award size={20} className="text-yellow-400"/> SpawnEngine Megaways
         </h2>
         <div className="flex justify-between text-base font-mono mb-5 border-b border-white/10 pb-3">
-            <span className="text-gray-400">Tokens: <span className="text-spawn-primary font-bold">{seTokens}</span></span>
+            <span className="text-gray-400">Tokens: <span className="spawn-primary-color font-bold">{seTokens}</span></span>
             <span className="text-gray-400">Free Spins: <span className="text-purple-400 font-bold">{freeSpins}</span></span>
         </div>
         
@@ -280,7 +288,7 @@ const SpawnSlotMegaways = ({ seTokens, freeSpins, onSpin }) => (
             onClick={onSpin}
             disabled={seTokens < 10 && freeSpins === 0}
             className="w-full py-3 text-lg font-black rounded-xl 
-                        bg-spawn-success text-black hover:bg-green-300 transition-all duration-300 disabled:bg-gray-600 disabled:text-gray-400 shadow-lg shadow-spawn-success/30"
+                        spawn-success-bg text-black hover:bg-green-300 transition-all duration-300 disabled:bg-gray-600 disabled:text-gray-400 shadow-lg shadow-spawn-success/30"
         >
             {freeSpins > 0 ? `FREE SPIN (${freeSpins})` : 'SPIN (10 SE Tokens)'}
         </button>
@@ -324,7 +332,7 @@ const HistoryView = ({ historyData }) => (
                         <p className="text-xs text-gray-500">{item.date}</p>
                     </div>
                     <div className="text-right">
-                        <p className={`text-sm font-bold ${item.result.startsWith('+') ? 'text-spawn-success' : 'text-red-400'}`}>
+                        <p className={`text-sm font-bold ${item.result.startsWith('+') ? 'spawn-success-color' : 'text-red-400'}`}>
                             {item.result}
                         </p>
                         <p className="text-xs text-purple-400">{item.xp}</p>
@@ -377,7 +385,7 @@ const ZoraCoinTrackerCard = ({ name, ticker, price, change, holders }) => {
                 </div>
                 <div className="text-right">
                     <div className="text-base font-bold text-white">{price} ETH</div>
-                    <div className={`text-sm font-mono font-bold ${isPositive ? 'text-spawn-success' : 'text-red-400'}`}>
+                    <div className={`text-sm font-mono font-bold ${isPositive ? 'spawn-success-color' : 'text-red-400'}`}>
                         {isPositive ? '+' : ''}{change.toFixed(2)}%
                     </div>
                 </div>
@@ -431,7 +439,7 @@ const MarketView = ({ activeMarketSubTab, setActiveMarketSubTab }) => {
                                             <div className="text-xs text-gray-400">P: {item.participants} | {item.price}</div>
                                         </div>
                                     </div>
-                                    <button className="px-3 py-1 text-sm rounded-full bg-spawn-primary/80 text-black font-bold hover:bg-spawn-primary">
+                                    <button className="px-3 py-1 text-sm rounded-full spawn-primary-bg/80 text-black font-bold hover:bg-spawn-primary">
                                         VIEW DROP
                                     </button>
                                 </CompactCard>
@@ -455,9 +463,9 @@ const MarketView = ({ activeMarketSubTab, setActiveMarketSubTab }) => {
             
             {activeMarketSubTab === 'creators' && (
                 <CompactCard className="p-8 text-center border-blue-500/50">
-                    <h3 className="text-2xl font-black text-spawn-primary">Creator Hub V1</h3>
+                    <h3 className="text-2xl font-black spawn-primary-color">Creator Hub V1</h3>
                     <p className="text-sm text-gray-400 mt-2">Discover, Follow, and Support Top Mesh Builders. Track their XP and token performance.</p>
-                    <button className="mt-6 px-6 py-3 text-sm rounded-full bg-spawn-primary/20 text-spawn-primary border border-spawn-primary/50 font-bold hover:bg-spawn-primary/30 transition-colors">
+                    <button className="mt-6 px-6 py-3 text-sm rounded-full spawn-primary-bg/20 spawn-primary-color border border-spawn-primary/50 font-bold hover:bg-spawn-primary/30 transition-colors">
                         View Creator Leaderboard
                     </button>
                 </CompactCard>
@@ -474,7 +482,7 @@ const BrainView = () => (
         <CompactCard className="p-6 bg-green-900/20 border-green-500/50">
             <div className="flex justify-between items-center mb-3 border-b border-white/10 pb-2">
                 <h2 className="text-xl font-black text-white">Mesh Brain AI Assistant</h2>
-                <span className="text-xs font-mono text-spawn-success flex items-center gap-1"><Cpu size={14} /> ACTIVE</span>
+                <span className="text-xs font-mono spawn-success-color flex items-center gap-1"><Cpu size={14} /> ACTIVE</span>
             </div>
             <p className="text-sm text-gray-400">Ask the Mesh Brain about your stats, quests, or new drops in the ecosystem.</p>
             <div className="mt-4 flex gap-3">
@@ -487,7 +495,7 @@ const BrainView = () => (
         
         <div className="grid md:grid-cols-2 gap-6">
             <CompactCard className="p-6">
-                <h3 className="text-lg font-bold text-spawn-primary mb-3 flex items-center gap-2">
+                <h3 className="text-lg font-bold spawn-primary-color mb-3 flex items-center gap-2">
                     <Target size={18} className="text-yellow-400" /> Weekly Bounties
                 </h3>
                 <div className="space-y-3">
@@ -526,7 +534,7 @@ const BrainView = () => (
                         New Zora coin deployer identified.
                     </li>
                     <li className="flex items-center gap-2">
-                        <div className="w-2 h-2 bg-spawn-success rounded-full"></div>
+                        <div className="w-2 h-2 spawn-success-bg rounded-full"></div>
                         XP Streak goal achieved for today.
                     </li>
                 </ul>
@@ -541,15 +549,15 @@ const ProfileView = () => (
         <SectionTitle title="Account Settings & API" icon={User} />
 
         {/* Profile Header (Larger, desktop style) */}
-        <div className="p-4 bg-spawn-card-trans border border-spawn-primary/20 rounded-xl flex items-center justify-between">
+        <div className="p-4 bg-spawn-card-trans border spawn-primary-color/20 rounded-xl flex items-center justify-between">
             <div className="flex items-center gap-4">
-                <div className="w-12 h-12 bg-purple-500 rounded-full flex items-center justify-center text-xl font-bold text-white">SE</div>
+                <div className="w-12 h-12 spawn-primary-bg rounded-full flex items-center justify-center text-xl font-bold text-black">SE</div>
                 <div>
                     <p className="text-xl font-black text-white leading-tight">@spawniz</p>
                     <div className="flex items-center gap-2 text-sm text-gray-400 mt-1">
                         <span>Mesh ID · Creator</span>
-                        <span className="h-2 w-2 bg-spawn-success rounded-full block"></span>
-                        <span className="text-spawn-primary font-bold">Mesh v1.0 PRO</span>
+                        <span className="h-2 w-2 spawn-success-bg rounded-full block"></span>
+                        <span className="spawn-primary-color font-bold">Mesh v1.0 PRO</span>
                     </div>
                 </div>
             </div>
@@ -561,9 +569,9 @@ const ProfileView = () => (
         <div className="grid md:grid-cols-3 gap-6">
             {/* XP SDK & Integration (Pillar 1) */}
             <CompactCard className="hover:border-spawn-success/50 transition-all">
-                <h3 className="text-lg font-bold text-spawn-success mb-2">XP SDK & Integration</h3>
+                <h3 className="text-lg font-bold spawn-success-color mb-2">XP SDK & Integration</h3>
                 <p className="text-sm text-gray-400 mb-4">Manage API keys to integrate SpawnEngine XP into your own apps.</p>
-                <button className="w-full py-2 text-sm font-bold rounded-lg bg-spawn-success/80 text-black border border-spawn-success hover:bg-spawn-success transition-colors shadow-md shadow-spawn-success/20">
+                <button className="w-full py-2 text-sm font-bold rounded-lg spawn-success-bg/80 text-black border border-spawn-success hover:bg-spawn-success transition-colors shadow-md shadow-spawn-success/20">
                     Show API Key
                 </button>
             </CompactCard>
@@ -614,7 +622,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
             
             {/* Top Logo / App Title */}
             <div className="flex items-center gap-3 p-2 mb-6 border-b border-spawn-border/50 pb-4">
-                <div className="w-8 h-8 bg-spawn-primary rounded-full flex items-center justify-center text-sm font-bold text-black">SE</div>
+                <div className="w-8 h-8 spawn-primary-bg rounded-full flex items-center justify-center text-sm font-bold text-black">SE</div>
                 <div>
                     <h1 className="text-base font-black text-white leading-none">SPAWNENGINE</h1>
                     <p className="text-[10px] text-gray-500 leading-none">onchain engine</p>
@@ -628,7 +636,7 @@ const Sidebar = ({ activeTab, setActiveTab }) => {
                         key={item.id}
                         className={`flex items-center gap-3 p-2 rounded-lg font-medium transition-all duration-200 ${
                             activeTab === item.id 
-                                ? 'bg-spawn-primary/20 text-spawn-primary border border-spawn-primary/50' 
+                                ? 'bg-spawn-primary/20 spawn-primary-color border border-spawn-primary/50' 
                                 : 'text-gray-400 hover:bg-spawn-card hover:text-white'
                         }`}
                         onClick={() => setActiveTab(item.id)}
@@ -795,12 +803,12 @@ export default function App() {
                 {/* Main Top Header (Connect & Base Layer Status - Matches image top bar) */}
                 <header className="flex justify-between items-center p-4 bg-spawn-card/90 backdrop-blur-md border-b border-spawn-border flex-shrink-0">
                     <div className="flex items-center gap-4 text-sm font-bold">
-                        <Layers size={18} className="text-spawn-primary" />
+                        <Layers size={18} className="spawn-primary-color" />
                         <span className="text-white uppercase tracking-wider">BASE MESH LAYER</span>
-                        <div className="h-2 w-2 bg-spawn-success rounded-full animate-pulse"></div>
+                        <div className="h-2 w-2 spawn-success-bg rounded-full animate-pulse"></div>
                     </div>
                     
-                    <button className="text-sm font-bold text-black bg-spawn-primary px-4 py-2 rounded-xl hover:bg-white/90 transition-colors flex items-center gap-2 shadow-lg shadow-spawn-primary/30">
+                    <button className="text-sm font-bold text-black spawn-primary-bg px-4 py-2 rounded-xl hover:bg-white/90 transition-colors flex items-center gap-2 shadow-lg shadow-spawn-primary/30">
                         <Map size={16} /> Connect Wallet
                     </button>
                 </header>
